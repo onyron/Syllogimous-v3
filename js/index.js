@@ -626,6 +626,11 @@ const RELATION_OPPOSITES = {
     "is right of": "is left of"
 };
 
+function stripHtml(str) {
+    if (!str) return "";
+    return str.replace(/<[^>]*>/g, "");
+}
+
 function generateUniqueConclusions(question, count) {
     if (!question || !question.conclusion) return [];
 
@@ -633,7 +638,7 @@ function generateUniqueConclusions(question, count) {
     const seenTexts = new Set();
     const usedEntityPairs = new Set();
 
-    const baseConcText = question.conclusion;
+    const baseConcText = stripHtml(question.conclusion);
     const baseNormText = baseConcText.trim().toLowerCase();
 
     conclusions.push({
@@ -644,8 +649,10 @@ function generateUniqueConclusions(question, count) {
 
     if (count <= 1) return conclusions;
 
+    const cleanPremises = (question.premises || []).map(p => stripHtml(p));
+    const allPremisesText = cleanPremises.join(" ") + " " + baseConcText;
+
     const entityRegex = /\[JUNK\]\d+\[\/JUNK\]|[A-Z]{3,}/g;
-    const allPremisesText = (question.premises || []).join(" ") + " " + question.conclusion;
     const entities = Array.from(new Set(allPremisesText.match(entityRegex) || []));
 
     const baseEntities = Array.from(new Set(baseConcText.match(entityRegex) || []));
