@@ -600,36 +600,178 @@ function generateQuestion() {
     return q;
 }
 
+const RELATION_OPPOSITES = {
+    "is same as": "is opposite of",
+    "is opposite of": "is same as",
+    "is opposite to": "is same as",
+    "is equal to": "is not equal to",
+    "is not equal to": "is equal to",
+    "is greater than": "is smaller than",
+    "is smaller than": "is greater than",
+    "is faster than": "is slower than",
+    "is slower than": "is faster than",
+    "is North of": "is South of",
+    "is South of": "is North of",
+    "is East of": "is West of",
+    "is West of": "is East of",
+    "is North-West of": "is South-East of",
+    "is South-East of": "is North-West of",
+    "is North-East of": "is South-West of",
+    "is South-West of": "is North-East of",
+    "contains": "is within",
+    "is within": "contains",
+    "is above": "is below",
+    "is below": "is above",
+    "is left of": "is right of",
+    "is right of": "is left of"
+};
+
 function generateUniqueConclusions(question, count) {
+    if (!question || !question.conclusion) return [];
+
     const conclusions = [];
     const seenTexts = new Set();
+    const usedEntityPairs = new Set();
+
+    const baseConcText = question.conclusion;
+    const baseNormText = baseConcText.trim().toLowerCase();
 
     conclusions.push({
-        text: question.conclusion,
+        text: baseConcText,
         isValid: question.isValid
     });
-    seenTexts.add(question.conclusion.trim().toLowerCase());
+    seenTexts.add(baseNormText);
 
-    let attempts = 0;
-    const maxAttempts = 100;
+    if (count <= 1) return conclusions;
 
-    while (conclusions.length < count && attempts < maxAttempts) {
-        attempts++;
-        const candidate = (typeof createAlternativeConclusion === 'function') 
-            ? createAlternativeConclusion(question) 
-            : null;
-        if (!candidate) break;
+    const entityRegex = /\[JUNK\]\d+\[\/JUNK\]|[A-Z]{3,}/g;
+    const allPremisesText = (question.premises || []).join(" ") + " " + question.conclusion;
+    const entities = Array.from(new Set(allPremisesText.match(entityRegex) || []));
 
-        const normalizedText = candidate.text.trim().toLowerCase();
-        if (!seenTexts.has(normalizedText)) {
-            seenTexts.add(normalizedText);
-            conclusions.push(candidate);
+    const baseEntities = Array.from(new Set(baseConcText.match(entityRegex) || []));
+    if (baseEntities.length >= 2) {
+        usedEntityPairs.add(`${baseEntities[0]}__${baseEntities[1]}`);
+        usedEntityPairs.add(`${baseEntities[1]}__${baseEntities[0]}`);
+    }
+
+    const knownRelations = Object.keys(RELATION_OPPOSITES);
+    const discoveredRelations = new Set();
+
+    for (const rel of knownRelations) {
+        if (allPremisesText.includes(rel)) {
+            discoveredRelations.add(rel);
+            if (RELATION_OPPOSITES[rel]) {
+                discoveredRelations.add(RELATION_OPPOSITES[rel]);
+            }
+        }
+    }
+
+    if (discoveredRelations.size === 0) {
+        discoveredRelations.add("is same as");
+        discoveredRelations.add("is opposite of");
+    }
+
+    const relationsList = Array.from(discoveredRelations);
+
+    const freshPairCandidates = [];
+    const reusedPairCandidates = [];
+
+    if (entities.length >= 2) {
+        for (let i = 0; i < entities.length; i++) {
+            for (let j = 0; j < entities.length; j++) {
+                if (i === j) continue;
+
+                const pairKey = `${entities[i]}__${entities[j]}`;
+                const isFreshPair = !usedEntityPairs.has(pairKey);
+
+                for (const rel of relationsList) {
+                    const candidateText = `${entities[i]} ${rel} ${entities[j]}`;
+                    const candidateNorm = candidateText.trim().toLowerCase();
+
+                    if (!seenTexts.has(candidateNorm)) {
+                        let isValidCandidate = Math.random() < 0.5;
+                        const oppRel = RELATION_OPPOSITES[rel];
+                        if (oppRel && baseConcText.includes(oppRel) && entities[i] && baseConcText.includes(entities[i])) {
+                            isValidCandidate = !question.isValid;
+                        }
+
+                        const item = { text: candidateText, isValid: isValidCandidate, pairKey: pairKey };
+
+                        if (isFreshPair) {
+                            freshPairCandidates.push(item);
+                        } else {
+                            reusedPairCandidates.push(item);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    const shuffle = (arr) => {
+        for (let i = arr.length - 1; i > 0; i--) {
+            const r = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[r]] = [arr[r], arr[i]];
+        }
+    };
+
+    shuffle(freshPairCandidates);
+    shuffle(reusedPairCandidates);
+
+    for (const cand of freshPairCandidates) {
+        if (conclusions.length >= count) break;
+        const norm = cand.text.trim().toLowerCase();
+        if (!seenTexts.has(norm)) {
+            seenTexts.add(norm);
+            usedEntityPairs.add(cand.pairKey);
+            conclusions.push({ text: cand.text, isValid: cand.isValid });
+        }
+    }
+
+    for (const cand of reusedPairCandidates) {
+        if (conclusions.length >= count) break;
+        const norm = cand.text.trim().toLowerCase();
+        if (!seenTexts.has(norm)) {
+            seenTexts.add(norm);
+            conclusions.push({ text: cand.text, isValid: cand.isValid });
+        }
+    }
+
+    let loopCount = 0;
+    while (conclusions.length < count && loopCount < 50) {
+        loopCount++;
+        const source = conclusions[loopCount % conclusions.length];
+        let mutatedText = source.text;
+        let mutatedValid = source.isValid;
+
+        for (const [rel, opp] of Object.entries(RELATION_OPPOSITES)) {
+            if (source.text.includes(rel)) {
+                mutatedText = source.text.replace(rel, opp);
+                mutatedValid = !source.isValid;
+                break;
+            }
+        }
+
+        const norm = mutatedText.trim().toLowerCase();
+        if (!seenTexts.has(norm)) {
+            seenTexts.add(norm);
+            conclusions.push({ text: mutatedText, isValid: mutatedValid });
+        } else {
+            const parts = source.text.split(" ");
+            if (parts.length >= 3) {
+                const swappedText = `${parts[parts.length - 1]} ${parts.slice(1, parts.length - 1).join(" ")} ${parts[0]}`;
+                const swappedNorm = swappedText.trim().toLowerCase();
+                if (!seenTexts.has(swappedNorm)) {
+                    seenTexts.add(swappedNorm);
+                    conclusions.push({ text: swappedText, isValid: !source.isValid });
+                }
+            }
         }
     }
 
     while (conclusions.length < count) {
-        const randomIndex = Math.floor(Math.random() * conclusions.length);
-        conclusions.push({ ...conclusions[randomIndex] });
+        const source = conclusions[Math.floor(Math.random() * conclusions.length)];
+        conclusions.push({ ...source });
     }
 
     return conclusions;
