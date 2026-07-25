@@ -428,7 +428,7 @@ function renderCarousel() {
             h2.style.justifyContent = "";
             h2.style.transform = "";
         }
-        carouselDisplayLabelType.textContent = "Conclusion";
+        carouselDisplayLabelType.textContent = "Conc";
         carouselDisplayLabelType.style.fontSize = "";
         carouselDisplayLabelType.style.letterSpacing = "";
         carouselDisplayLabelProgress.style.fontSize = "";
@@ -631,6 +631,12 @@ function stripHtml(str) {
     return str.replace(/<[^>]*>/g, "");
 }
 
+function formatEntity(entity) {
+    if (!entity) return "";
+    if (entity.includes("<b") || entity.includes("<span")) return entity;
+    return `<b>${entity}</b>`;
+}
+
 function generateUniqueConclusions(question, count) {
     if (!question || !question.conclusion) return [];
 
@@ -638,11 +644,12 @@ function generateUniqueConclusions(question, count) {
     const seenTexts = new Set();
     const usedEntityPairs = new Set();
 
-    const baseConcText = stripHtml(question.conclusion);
-    const baseNormText = baseConcText.trim().toLowerCase();
+    const baseConcRaw = question.conclusion;
+    const baseConcClean = stripHtml(baseConcRaw);
+    const baseNormText = baseConcClean.trim().toLowerCase();
 
     conclusions.push({
-        text: baseConcText,
+        text: baseConcRaw,
         isValid: question.isValid
     });
     seenTexts.add(baseNormText);
@@ -650,12 +657,12 @@ function generateUniqueConclusions(question, count) {
     if (count <= 1) return conclusions;
 
     const cleanPremises = (question.premises || []).map(p => stripHtml(p));
-    const allPremisesText = cleanPremises.join(" ") + " " + baseConcText;
+    const allPremisesText = cleanPremises.join(" ") + " " + baseConcClean;
 
     const entityRegex = /\[JUNK\]\d+\[\/JUNK\]|[A-Z]{3,}/g;
     const entities = Array.from(new Set(allPremisesText.match(entityRegex) || []));
 
-    const baseEntities = Array.from(new Set(baseConcText.match(entityRegex) || []));
+    const baseEntities = Array.from(new Set(baseConcClean.match(entityRegex) || []));
     if (baseEntities.length >= 2) {
         usedEntityPairs.add(`${baseEntities[0]}__${baseEntities[1]}`);
         usedEntityPairs.add(`${baseEntities[1]}__${baseEntities[0]}`);
@@ -692,13 +699,13 @@ function generateUniqueConclusions(question, count) {
                 const isFreshPair = !usedEntityPairs.has(pairKey);
 
                 for (const rel of relationsList) {
-                    const candidateText = `${entities[i]} ${rel} ${entities[j]}`;
-                    const candidateNorm = candidateText.trim().toLowerCase();
+                    const candidateText = `${formatEntity(entities[i])} ${rel} ${formatEntity(entities[j])}`;
+                    const candidateNorm = stripHtml(candidateText).trim().toLowerCase();
 
                     if (!seenTexts.has(candidateNorm)) {
                         let isValidCandidate = Math.random() < 0.5;
                         const oppRel = RELATION_OPPOSITES[rel];
-                        if (oppRel && baseConcText.includes(oppRel) && entities[i] && baseConcText.includes(entities[i])) {
+                        if (oppRel && baseConcClean.includes(oppRel) && entities[i] && baseConcClean.includes(entities[i])) {
                             isValidCandidate = !question.isValid;
                         }
 
@@ -727,7 +734,7 @@ function generateUniqueConclusions(question, count) {
 
     for (const cand of freshPairCandidates) {
         if (conclusions.length >= count) break;
-        const norm = cand.text.trim().toLowerCase();
+        const norm = stripHtml(cand.text).trim().toLowerCase();
         if (!seenTexts.has(norm)) {
             seenTexts.add(norm);
             usedEntityPairs.add(cand.pairKey);
@@ -737,7 +744,7 @@ function generateUniqueConclusions(question, count) {
 
     for (const cand of reusedPairCandidates) {
         if (conclusions.length >= count) break;
-        const norm = cand.text.trim().toLowerCase();
+        const norm = stripHtml(cand.text).trim().toLowerCase();
         if (!seenTexts.has(norm)) {
             seenTexts.add(norm);
             conclusions.push({ text: cand.text, isValid: cand.isValid });
@@ -759,15 +766,16 @@ function generateUniqueConclusions(question, count) {
             }
         }
 
-        const norm = mutatedText.trim().toLowerCase();
+        const norm = stripHtml(mutatedText).trim().toLowerCase();
         if (!seenTexts.has(norm)) {
             seenTexts.add(norm);
             conclusions.push({ text: mutatedText, isValid: mutatedValid });
         } else {
-            const parts = source.text.split(" ");
+            const cleanSource = stripHtml(source.text);
+            const parts = cleanSource.split(" ");
             if (parts.length >= 3) {
-                const swappedText = `${parts[parts.length - 1]} ${parts.slice(1, parts.length - 1).join(" ")} ${parts[0]}`;
-                const swappedNorm = swappedText.trim().toLowerCase();
+                const swappedText = `${formatEntity(parts[parts.length - 1])} ${parts.slice(1, parts.length - 1).join(" ")} ${formatEntity(parts[0])}`;
+                const swappedNorm = stripHtml(swappedText).trim().toLowerCase();
                 if (!seenTexts.has(swappedNorm)) {
                     seenTexts.add(swappedNorm);
                     conclusions.push({ text: swappedText, isValid: !source.isValid });
