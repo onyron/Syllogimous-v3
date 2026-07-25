@@ -662,12 +662,6 @@ function generateUniqueConclusions(question, count) {
     const entityRegex = /\[JUNK\]\d+\[\/JUNK\]|[A-Z]{3,}/g;
     const entities = Array.from(new Set(allPremisesText.match(entityRegex) || []));
 
-    const baseEntities = Array.from(new Set(baseConcClean.match(entityRegex) || []));
-    if (baseEntities.length >= 2) {
-        usedEntityPairs.add(`${baseEntities[0]}__${baseEntities[1]}`);
-        usedEntityPairs.add(`${baseEntities[1]}__${baseEntities[0]}`);
-    }
-
     const knownRelations = Object.keys(RELATION_OPPOSITES);
     const discoveredRelations = new Set();
 
@@ -687,6 +681,52 @@ function generateUniqueConclusions(question, count) {
 
     const relationsList = Array.from(discoveredRelations);
 
+    const knownPairTrueRelation = new Map();
+
+    const recordTrueRelation = (eA, eB, rel, isVal) => {
+        if (!eA || !eB || !rel) return;
+        const trueRelForAB = isVal ? rel : RELATION_OPPOSITES[rel];
+        if (trueRelForAB) {
+            knownPairTrueRelation.set(`${eA}__${eB}`, trueRelForAB);
+            if (RELATION_OPPOSITES[trueRelForAB]) {
+                knownPairTrueRelation.set(`${eB}__${eA}`, RELATION_OPPOSITES[trueRelForAB]);
+            }
+        }
+    };
+
+    const baseEntities = Array.from(new Set(baseConcClean.match(entityRegex) || []));
+    if (baseEntities.length >= 2) {
+        for (const rel of knownRelations) {
+            if (baseConcClean.includes(rel)) {
+                recordTrueRelation(baseEntities[0], baseEntities[1], rel, question.isValid);
+                usedEntityPairs.add(`${baseEntities[0]}__${baseEntities[1]}`);
+                usedEntityPairs.add(`${baseEntities[1]}__${baseEntities[0]}`);
+                break;
+            }
+        }
+    }
+
+    for (const prem of cleanPremises) {
+        const pEntities = Array.from(new Set(prem.match(entityRegex) || []));
+        if (pEntities.length >= 2) {
+            for (const rel of knownRelations) {
+                if (prem.includes(rel)) {
+                    recordTrueRelation(pEntities[0], pEntities[1], rel, true);
+                    break;
+                }
+            }
+        }
+    }
+
+    const evaluateCandidateValidity = (eA, eB, candidateRel) => {
+        const pairKey = `${eA}__${eB}`;
+        if (knownPairTrueRelation.has(pairKey)) {
+            const actualTrueRel = knownPairTrueRelation.get(pairKey);
+            return candidateRel === actualTrueRel;
+        }
+        return Math.random() < 0.5;
+    };
+
     const freshPairCandidates = [];
     const reusedPairCandidates = [];
 
@@ -703,12 +743,7 @@ function generateUniqueConclusions(question, count) {
                     const candidateNorm = stripHtml(candidateText).trim().toLowerCase();
 
                     if (!seenTexts.has(candidateNorm)) {
-                        let isValidCandidate = Math.random() < 0.5;
-                        const oppRel = RELATION_OPPOSITES[rel];
-                        if (oppRel && baseConcClean.includes(oppRel) && entities[i] && baseConcClean.includes(entities[i])) {
-                            isValidCandidate = !question.isValid;
-                        }
-
+                        const isValidCandidate = evaluateCandidateValidity(entities[i], entities[j], rel);
                         const item = { text: candidateText, isValid: isValidCandidate, pairKey: pairKey };
 
                         if (isFreshPair) {
@@ -1150,8 +1185,8 @@ function createHQLI(question, i) {
         return `
             <div class="hqli-postamble">${label}</div>
             <div class="hqli-conclusion">${cText}</div>
-            <div class="hqli-answer-user ${cUserClass}">User Answer: ${cUserAns}</div>
-            <div class="hqli-answer ${c.isValid}">Right Answer: ${cRightAns}</div>
+            <div class="hqli-answer-user ${cUserClass}">${cUserAns}</div>
+            <div class="hqli-answer ${c.isValid}">${cRightAns}</div>
         `;
     }).join('\n');
 
