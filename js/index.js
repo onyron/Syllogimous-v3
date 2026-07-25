@@ -121,7 +121,9 @@ function registerEventHandlers() {
 }
 
 function save() {
-    PROFILE_STORE.saveProfiles();
+    if (typeof PROFILE_STORE !== 'undefined') {
+        PROFILE_STORE.saveProfiles();
+    }
     setLocalStorageObj(appStateKey, appState);
 }
 
@@ -135,7 +137,9 @@ function appStateStartup() {
 
 function load() {
     appStateStartup();
-    PROFILE_STORE.startup();
+    if (typeof PROFILE_STORE !== 'undefined') {
+        PROFILE_STORE.startup();
+    }
 
     renderHQL();
     renderFolders();
@@ -659,7 +663,9 @@ function init() {
 
     carouselInit();
     displayInit();
-    PROGRESS_STORE.renderCurrentProgress(question);
+    if (typeof PROGRESS_STORE !== 'undefined') {
+        PROGRESS_STORE.renderCurrentProgress(question);
+    }
     renderConclusionSpoiler();
 }
 
