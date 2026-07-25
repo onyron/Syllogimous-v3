@@ -284,6 +284,8 @@ const keySettingMap = {
     "p-67": "autoProgressionChange",
     "p-68": "autoProgressionTimeDrop",
     "p-69": "autoProgressionTimeBump",
+    "enable-multiple-conclusions": "enableMultipleConclusions",
+    "number-of-conclusions": "numberOfConclusions",
 };
 
 const legacySettings = [
