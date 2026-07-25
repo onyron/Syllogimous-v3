@@ -1016,13 +1016,25 @@ function handleKeyPress(event) {
             break;
         case "KeyJ":
         case "Digit1":
-        case "ArrowLeft":
             checkIfTrue();
             break;
         case "KeyK":
         case "Digit2":
-        case "ArrowRight":
             checkIfFalse();
+            break;
+        case "ArrowLeft":
+            if (savedata.enableCarouselMode && !carouselNextButton.disabled) {
+                carouselBackButton.click();
+            } else {
+                checkIfTrue();
+            }
+            break;
+        case "ArrowRight":
+            if (savedata.enableCarouselMode && !carouselNextButton.disabled) {
+                carouselNextButton.click();
+            } else {
+                checkIfFalse();
+            }
             break;
         case "Space":
             timerToggle.checked = !timerToggle.checked;
