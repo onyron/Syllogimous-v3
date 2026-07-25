@@ -368,6 +368,9 @@ function renderCarousel() {
     const q = renderJunkEmojis(question);
     const conclusions = q.conclusionsList || [{ text: q.conclusion, isValid: q.isValid }];
     const currentConc = conclusions[currentConclusionIndex];
+    const currentConcText = renderJunkEmojis({ conclusion: currentConc.text }).conclusion;
+    const carouselControls = carousel.querySelector(".carousel_controls");
+    const h2 = carousel.querySelector(".carousel_display_label-wrapper h2");
 
     carousel.classList.add("visible");
     display.classList.remove("visible");
@@ -378,26 +381,56 @@ function renderCarousel() {
     }
     
     if (carouselIndex < q.premises.length) {
+        if (carouselControls) carouselControls.style.display = "flex";
         carouselNextButton.disabled = false;
         disableConfirmationButtons();
+        if (h2) {
+            h2.style.padding = "";
+            h2.style.justifyContent = "";
+            h2.style.transform = "";
+        }
         carouselDisplayLabelType.textContent = "Premise";
+        carouselDisplayLabelType.style.fontSize = "";
+        carouselDisplayLabelType.style.letterSpacing = "";
+        carouselDisplayLabelProgress.style.fontSize = "";
+        carouselDisplayLabelProgress.style.whiteSpace = "";
         carouselDisplayLabelProgress.textContent = (carouselIndex + 1) + "/" + q.premises.length;
         carouselDisplayText.innerHTML = q.premises[carouselIndex];
     } else if (q.operations && carouselIndex < q.operations.length + q.premises.length) {
+        if (carouselControls) carouselControls.style.display = "flex";
         carouselNextButton.disabled = false;
         const operationIndex = carouselIndex - q.premises.length;
         disableConfirmationButtons();
+        if (h2) {
+            h2.style.padding = "";
+            h2.style.justifyContent = "";
+            h2.style.transform = "";
+        }
         carouselDisplayLabelType.textContent = "Transformation";
+        carouselDisplayLabelType.style.fontSize = "";
+        carouselDisplayLabelType.style.letterSpacing = "";
+        carouselDisplayLabelProgress.style.fontSize = "";
+        carouselDisplayLabelProgress.style.whiteSpace = "";
         carouselDisplayLabelProgress.textContent = (operationIndex + 1) + "/" + q.operations.length;
         carouselDisplayText.innerHTML = q.operations[operationIndex];
     } else {
+        if (carouselControls) carouselControls.style.display = "none";
         carouselNextButton.disabled = true;
         enableConfirmationButtons();
-        carouselDisplayLabelType.textContent = conclusions.length > 1 
-            ? `CONCLUSION ${currentConclusionIndex + 1} OF ${conclusions.length}`
-            : "Conclusion";
-        carouselDisplayLabelProgress.textContent = "";
-        carouselDisplayText.innerHTML = currentConc.text;
+        if (h2) {
+            h2.style.padding = "0 15px";
+            h2.style.justifyContent = "space-between";
+            h2.style.transform = "translateY(6px)";
+        }
+        carouselDisplayLabelType.textContent = "Conclusion";
+        carouselDisplayLabelType.style.fontSize = "0.78em";
+        carouselDisplayLabelType.style.letterSpacing = "0px";
+        carouselDisplayLabelProgress.style.fontSize = "0.8em";
+        carouselDisplayLabelProgress.style.whiteSpace = "nowrap";
+        carouselDisplayLabelProgress.textContent = conclusions.length > 1 
+            ? `${currentConclusionIndex + 1}/${conclusions.length}`
+            : "";
+        carouselDisplayText.innerHTML = currentConcText;
     }
 }
 
@@ -764,33 +797,46 @@ function storeQuestionAndSave() {
 
 function processConclusionAnswer(userAnswer) {
     if (processingAnswer) return;
+    processingAnswer = true;
 
     const currentConc = question.conclusionsList[currentConclusionIndex];
     currentConc.answerUser = userAnswer;
     currentConc.isCorrect = (userAnswer === currentConc.isValid);
 
-    if (currentConclusionIndex < question.conclusionsList.length - 1) {
-        currentConclusionIndex++;
-        displayInit();
-        renderCarousel();
-    } else {
-        processingAnswer = true;
-        const allCorrect = question.conclusionsList.every(c => c.isCorrect);
-        question.isValid = allCorrect;
-        question.answerUser = allCorrect;
+    const isCorrectStep = currentConc.isCorrect;
+    const isLastStep = (currentConclusionIndex >= question.conclusionsList.length - 1);
 
-        if (allCorrect) {
-            appState.score++;
-            question.correctness = 'right';
+    const onFeedbackFinished = () => {
+        if (!isLastStep) {
+            currentConclusionIndex++;
+            processingAnswer = false;
+            displayInit();
+            renderCarousel();
         } else {
-            appState.score--;
-            question.correctness = 'wrong';
-        }
+            const allCorrect = question.conclusionsList.every(c => c.isCorrect);
+            question.isValid = allCorrect;
+            question.answerUser = allCorrect;
 
-        question.answeredAt = new Date().getTime();
-        storeQuestionAndSave();
-        renderHQL(true);
-        wowFeedback();
+            if (allCorrect) {
+                appState.score++;
+                question.correctness = 'right';
+            } else {
+                appState.score--;
+                question.correctness = 'wrong';
+            }
+
+            question.answeredAt = new Date().getTime();
+            storeQuestionAndSave();
+            renderHQL(true);
+            init();
+            processingAnswer = false;
+        }
+    };
+
+    if (isCorrectStep) {
+        wowFeedbackRight(onFeedbackFinished);
+    } else {
+        wowFeedbackWrong(onFeedbackFinished);
     }
 }
 
@@ -906,25 +952,10 @@ function createHQLI(question, i) {
     const q = renderJunkEmojis(question);
     const parent = document.createElement("DIV");
 
-    const answerUser = q.answerUser;
-    const answerUserClassName = {
-        'missed': '',
-        'right': answerUser,
-        'wrong': answerUser,
-    }[q.correctness];
-    
-    const answer = q.isValid;
     let classModifier = {
         'missed': '',
         'right': 'hqli--right',
         'wrong': 'hqli--wrong'
-    }[q.correctness];
-    
-    let answerDisplay = ('' + answer).toUpperCase();
-    let answerUserDisplay = {
-        'missed': '(TIMED OUT)',
-        'right': ('' + answerUser).toUpperCase(),
-        'wrong': ('' + answerUser).toUpperCase()
     }[q.correctness];
 
     const htmlPremises = q.premises
@@ -934,12 +965,27 @@ function createHQLI(question, i) {
     const htmlOperations = q.operations ? q.operations.map(o => `<div class="hqli-operation">${o}</div>`).join("\n") : '';
 
     let responseTimeHtml = '';
-    if (q.startedAt && q.answeredAt)
-        responseTimeHtml =
-`
-        <div class="hqli-response-time">${Math.round((q.answeredAt - q.startedAt) / 1000)} sec</div>
-`;
+    if (q.startedAt && q.answeredAt) {
+        responseTimeHtml = `<div class="hqli-response-time">${Math.round((q.answeredAt - q.startedAt) / 1000)} sec</div>`;
+    }
+
+    const conclusions = q.conclusionsList || [{ text: q.conclusion, isValid: q.isValid, answerUser: q.answerUser, isCorrect: q.correctness === 'right' }];
     
+    const conclusionsHtml = conclusions.map((c, idx) => {
+        const cText = renderJunkEmojis({ conclusion: c.text }).conclusion;
+        const cUserAns = c.answerUser !== undefined ? ('' + c.answerUser).toUpperCase() : '(TIMED OUT)';
+        const cRightAns = ('' + c.isValid).toUpperCase();
+        const cUserClass = c.isCorrect ? 'right' : 'wrong';
+        const label = conclusions.length > 1 ? `Conclusion ${idx + 1}` : 'Conclusion';
+
+        return `
+            <div class="hqli-postamble">${label}</div>
+            <div class="hqli-conclusion">${cText}</div>
+            <div class="hqli-answer-user ${cUserClass}">User Answer: ${cUserAns}</div>
+            <div class="hqli-answer ${c.isValid}">Right Answer: ${cRightAns}</div>
+        `;
+    }).join('\n');
+
     const html =
 `<div class="hqli ${classModifier}">
     <div class="inner">
@@ -950,10 +996,7 @@ function createHQLI(question, i) {
             ${htmlOperations ? '<div class="hqli-transform-header">Transformations</div>' : ''}
             ${htmlOperations}
         </div>
-        <div class="hqli-postamble">Conclusion</div>
-        <div class="hqli-conclusion">${q.conclusion}</div>
-        <div class="hqli-answer-user ${answerUserClassName}">${answerUserDisplay}</div>
-        <div class="hqli-answer ${answer}">${answerDisplay}</div>
+        ${conclusionsHtml}
         ${responseTimeHtml}
         <div class="hqli-footer">
             <div>${q.category}</div>
