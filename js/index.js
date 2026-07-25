@@ -77,10 +77,12 @@ function registerEventHandlers() {
 
         // Checkbox handler
         if (input.type === "checkbox") {
-            input.addEventListener("input", evt => {
+            const handleCheck = () => {
                 savedata[value] = !!input.checked;
                 refresh();
-            });
+            };
+            input.addEventListener("input", handleCheck);
+            input.addEventListener("change", handleCheck);
         }
 
         // Number handler
@@ -638,9 +640,13 @@ function init() {
 
     currentConclusionIndex = 0;
 
-    const numConclusions = (savedata.enableMultipleConclusions && savedata.numberOfConclusions > 0) 
-        ? savedata.numberOfConclusions 
-        : 1;
+    const multiCheckbox = document.querySelector("#enable-multiple-conclusions");
+    const numInput = document.querySelector("#number-of-conclusions");
+
+    const isMultiEnabled = !!(savedata.enableMultipleConclusions || (multiCheckbox && multiCheckbox.checked));
+    const countVal = savedata.numberOfConclusions || (numInput ? parseInt(numInput.value, 10) : 3);
+
+    const numConclusions = isMultiEnabled ? Math.max(1, countVal) : 1;
 
     question.conclusionsList = generateUniqueConclusions(question, numConclusions);
 
