@@ -633,23 +633,59 @@ function stripHtml(str) {
 
 function formatEntity(entity) {
     if (!entity) return "";
-    if (entity.includes("<b") || entity.includes("<span")) return entity;
+    if (entity.includes("<b") || entity.includes("<span") || entity.includes("[JUNK]")) return entity;
     return `<b>${entity}</b>`;
 }
 
 function extractEntities(str) {
-    if (!str) return [];
-    let clean = str.replace(/<svg[^>]*#junk-(\d+)[^>]*><\/svg>/gi, "[JUNK]$1[/JUNK]");
-    clean = clean.replace(/<[^>]*>/g, "");
-    const entityRegex = /\[JUNK\]\d+\[\/JUNK\]|[A-Z]{3,}/g;
-    return Array.from(new Set(clean.match(entityRegex) || []));
+    if (!str || str.toLowerCase().includes("explainer")) return [];
+    let clean = str.replace(/<svg[^>]*>.*?#junk-(\d+).*?<\/svg>/gi, "[JUNK]$1[/JUNK]");
+    clean = clean.replace(/#junk-(\d+)/gi, "[JUNK]$1[/JUNK]");
+    
+    const bMatches = Array.from(clean.matchAll(/<b>([^<]+)<\/b>/gi)).map(m => m[1].trim());
+    const junkMatches = Array.from(clean.matchAll(/\[JUNK\]\d+\[\/JUNK\]/g)).map(m => m[0]);
+    
+    const entities = [];
+    for (const e of [...bMatches, ...junkMatches]) {
+        const item = e.replace(/<[^>]*>/g, "").trim();
+        if (item && !entities.includes(item)) {
+            entities.push(item);
+        }
+    }
+
+    if (entities.length === 0) {
+        const cleanNoTags = clean.replace(/<[^>]*>/g, "");
+        const keywords = new Set([
+            "is", "same", "as", "opposite", "of", "to", "equal", "not", 
+            "greater", "than", "smaller", "faster", "slower", "north", "south", 
+            "east", "west", "north-east", "south-east", "north-west", "south-west", 
+            "above", "below", "left", "right", "contains", "within", "at", "and"
+        ]);
+        const tokens = cleanNoTags.match(/\b[A-Za-z0-9_-]+\b/g) || [];
+        for (const t of tokens) {
+            if (!keywords.has(t.toLowerCase()) && !/^\d+$/.test(t) && t.length >= 2) {
+                if (!entities.includes(t)) {
+                    entities.push(t);
+                }
+            }
+        }
+    }
+
+    return entities;
 }
 
 function solveSpatialGraph(premises, baseConclusion, question) {
-    const cleanPremises = (premises || []).map(p => stripHtml(p));
-    const baseClean = stripHtml(baseConclusion || "");
-    const allText = cleanPremises.join(" ") + " " + baseClean;
-    const entities = extractEntities(allText);
+    const rawPremises = premises || [];
+    const allRaw = [...rawPremises, baseConclusion || ""];
+    
+    const entities = [];
+    for (const strVal of allRaw) {
+        for (const e of extractEntities(strVal)) {
+            if (!entities.includes(e)) {
+                entities.push(e);
+            }
+        }
+    }
 
     if (entities.length < 2) return null;
 
@@ -661,38 +697,45 @@ function solveSpatialGraph(premises, baseConclusion, question) {
         parity.set(e, undefined);
     });
 
-    if (entities.length > 0) {
-        coords.set(entities[0], { x: 0, y: 0, z: 0 });
-        parity.set(entities[0], 0);
-    }
+    coords.set(entities[0], { x: 0, y: 0, z: 0 });
+    parity.set(entities[0], 0);
 
     const DIR_VECTORS = {
-        "is North of": { x: 0, y: 1, z: 0 },
-        "is South of": { x: 0, y: -1, z: 0 },
-        "is East of": { x: 1, y: 0, z: 0 },
-        "is West of": { x: -1, y: 0, z: 0 },
-        "is North-East of": { x: 1, y: 1, z: 0 },
-        "is South-East of": { x: 1, y: -1, z: 0 },
-        "is North-West of": { x: -1, y: 1, z: 0 },
-        "is South-West of": { x: -1, y: -1, z: 0 },
-        "is above": { x: 0, y: 0, z: 1 },
-        "is below": { x: 0, y: 0, z: -1 }
+        "North-East of": { x: 1, y: 1, z: 0 },
+        "South-East of": { x: 1, y: -1, z: 0 },
+        "North-West of": { x: -1, y: 1, z: 0 },
+        "South-West of": { x: -1, y: -1, z: 0 },
+        "North of": { x: 0, y: 1, z: 0 },
+        "South of": { x: 0, y: -1, z: 0 },
+        "East of": { x: 1, y: 0, z: 0 },
+        "West of": { x: -1, y: 0, z: 0 },
+        "above": { x: 0, y: 0, z: 1 },
+        "below": { x: 0, y: 0, z: -1 },
+        "left of": { x: -1, y: 0, z: 0 },
+        "right of": { x: 1, y: 0, z: 0 },
+        "greater than": { x: 1, y: 0, z: 0 },
+        "smaller than": { x: -1, y: 0, z: 0 },
+        "faster than": { x: 1, y: 0, z: 0 },
+        "slower than": { x: -1, y: 0, z: 0 },
+        "contains": { x: 1, y: 0, z: 0 },
+        "within": { x: -1, y: 0, z: 0 }
     };
 
     let changed = true;
     let passes = 0;
-    while (changed && passes < 25) {
+    while (changed && passes < 30) {
         changed = false;
         passes++;
 
-        for (const prem of cleanPremises) {
+        for (const prem of rawPremises) {
             const pEntities = extractEntities(prem);
             if (pEntities.length < 2) continue;
             const e1 = pEntities[0];
             const e2 = pEntities[1];
+            const premClean = stripHtml(prem);
 
-            for (const [dir, vec] of Object.entries(DIR_VECTORS)) {
-                if (prem.includes(dir)) {
+            for (const [dirKey, vec] of Object.entries(DIR_VECTORS)) {
+                if (premClean.includes(dirKey)) {
                     const c1 = coords.get(e1);
                     const c2 = coords.get(e2);
 
@@ -715,12 +758,12 @@ function solveSpatialGraph(premises, baseConclusion, question) {
                 }
             }
 
-            if (prem.includes("is same as") || prem.includes("is equal to")) {
+            if (premClean.includes("is same as") || premClean.includes("is equal to")) {
                 const p1 = parity.get(e1);
                 const p2 = parity.get(e2);
                 if (p1 !== undefined && p2 === undefined) { parity.set(e2, p1); changed = true; }
                 else if (p2 !== undefined && p1 === undefined) { parity.set(e1, p2); changed = true; }
-            } else if (prem.includes("is opposite") || prem.includes("is not equal to")) {
+            } else if (premClean.includes("is opposite") || premClean.includes("is not equal to")) {
                 const p1 = parity.get(e1);
                 const p2 = parity.get(e2);
                 if (p1 !== undefined && p2 === undefined) { parity.set(e2, 1 - p1); changed = true; }
@@ -728,6 +771,8 @@ function solveSpatialGraph(premises, baseConclusion, question) {
             }
         }
     }
+
+    const baseClean = stripHtml(baseConclusion || "");
 
     return {
         entities,
@@ -741,18 +786,14 @@ function solveSpatialGraph(premises, baseConclusion, question) {
                 const dy = c1.y - c2.y;
                 const dz = c1.z - c2.z;
 
-                const matchX = dx > 0 ? "East" : dx < 0 ? "West" : "";
-                const matchY = dy > 0 ? "North" : dy < 0 ? "South" : "";
-
-                let actualRel = "";
-                if (matchY && matchX) actualRel = `is ${matchY}-${matchX} of`;
-                else if (matchY) actualRel = `is ${matchY} of`;
-                else if (matchX) actualRel = `is ${matchX} of`;
-
-                if (rel === "contains") return dx > 0 || dy > 0;
-                if (rel === "is within") return dx < 0 || dy < 0;
-
-                if (actualRel) return rel === actualRel;
+                for (const [dirKey, vec] of Object.entries(DIR_VECTORS)) {
+                    if (rel.includes(dirKey)) {
+                        const sx = Math.sign(dx);
+                        const sy = Math.sign(dy);
+                        const sz = Math.sign(dz);
+                        return (sx === vec.x) && (sy === vec.y) && (sz === vec.z);
+                    }
+                }
             }
 
             const p1 = parity.get(e1);
@@ -771,7 +812,7 @@ function solveSpatialGraph(premises, baseConclusion, question) {
                 }
             }
 
-            return false;
+            return null;
         }
     };
 }
@@ -806,7 +847,15 @@ function generateUniqueConclusions(question, count) {
     const cleanPremises = (question.premises || []).map(p => stripHtml(p));
     const allPremisesText = cleanPremises.join(" ") + " " + baseConcClean;
 
-    const entities = extractEntities(allPremisesText);
+    const entities = [];
+    const allRaw = [...(question.premises || []), question.conclusion || ""];
+    for (const s of allRaw) {
+        for (const e of extractEntities(s)) {
+            if (!entities.includes(e)) {
+                entities.push(e);
+            }
+        }
+    }
 
     const knownRelations = Object.keys(RELATION_OPPOSITES);
     const discoveredRelations = new Set();
@@ -826,7 +875,7 @@ function generateUniqueConclusions(question, count) {
     }
 
     const relationsList = Array.from(discoveredRelations);
-    const candidates = [];
+    const candidatePool = [];
 
     if (entities.length >= 2) {
         for (let i = 0; i < entities.length; i++) {
@@ -837,11 +886,16 @@ function generateUniqueConclusions(question, count) {
                 const eB = entities[j];
 
                 let distance = 1;
+                let dx = 0, dy = 0, dz = 0;
+
                 if (graph && graph.coords) {
                     const cA = graph.coords.get(eA);
                     const cB = graph.coords.get(eB);
                     if (cA && cB) {
-                        distance = Math.abs(cA.x - cB.x) + Math.abs(cA.y - cB.y) + Math.abs(cA.z - cB.z);
+                        dx = cA.x - cB.x;
+                        dy = cA.y - cB.y;
+                        dz = cA.z - cB.z;
+                        distance = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
                     }
                 }
 
@@ -850,39 +904,81 @@ function generateUniqueConclusions(question, count) {
                     const candidateNorm = stripHtml(candidateText).trim().toLowerCase();
 
                     if (!seenTexts.has(candidateNorm)) {
-                        let isValidCandidate = false;
+                        let isValidCandidate = null;
                         if (graph && graph.evaluateRelation) {
                             isValidCandidate = graph.evaluateRelation(eA, eB, rel);
-                        } else {
-                            isValidCandidate = Math.random() < 0.5;
                         }
 
-                        candidates.push({
-                            text: candidateText,
-                            isValid: isValidCandidate,
-                            distance: distance
-                        });
+                        if (isValidCandidate !== null) {
+                            candidatePool.push({
+                                text: candidateText,
+                                isValid: isValidCandidate,
+                                distance: distance,
+                                dx: dx,
+                                dy: dy,
+                                dz: dz,
+                                eA: eA,
+                                eB: eB
+                            });
+                        }
                     }
                 }
             }
         }
     }
 
-    for (let i = candidates.length - 1; i > 0; i--) {
+    for (let i = candidatePool.length - 1; i > 0; i--) {
         const r = Math.floor(Math.random() * (i + 1));
-        [candidates[i], candidates[r]] = [candidates[r], candidates[i]];
+        [candidatePool[i], candidatePool[r]] = [candidatePool[r], candidatePool[i]];
     }
 
-    if (isHarderEnabled) {
-        candidates.sort((a, b) => b.distance - a.distance);
-    }
+    const getPrimaryAxis = (c) => {
+        const absX = Math.abs(c.dx);
+        const absY = Math.abs(c.dy);
+        const absZ = Math.abs(c.dz);
+        if (absX >= absY && absX >= absZ) return 'X';
+        if (absY >= absX && absY >= absZ) return 'Y';
+        return 'Z';
+    };
 
-    for (const cand of candidates) {
-        if (conclusions.length >= count) break;
-        const norm = stripHtml(cand.text).trim().toLowerCase();
-        if (!seenTexts.has(norm)) {
-            seenTexts.add(norm);
-            conclusions.push({ text: cand.text, isValid: cand.isValid });
+    const selectedPool = [];
+    while (conclusions.length < count && candidatePool.length > 0) {
+        const coveredAxes = new Set(selectedPool.map(getPrimaryAxis));
+        const coveredPairs = new Set();
+        selectedPool.forEach(s => {
+            coveredPairs.add(`${s.eA}_${s.eB}`);
+            coveredPairs.add(`${s.eB}_${s.eA}`);
+        });
+
+        let bestScore = -Infinity;
+        let bestIndex = -1;
+
+        for (let idx = 0; idx < candidatePool.length; idx++) {
+            const c = candidatePool[idx];
+            let score = isHarderEnabled ? c.distance : 1;
+
+            const axis = getPrimaryAxis(c);
+            const pairKey = `${c.eA}_${c.eB}`;
+
+            if (!coveredAxes.has(axis)) score += 5.0;
+            if (!coveredPairs.has(pairKey)) score += 2.0;
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestIndex = idx;
+            }
+        }
+
+        if (bestIndex !== -1) {
+            const chosen = candidatePool.splice(bestIndex, 1)[0];
+            const norm = stripHtml(chosen.text).trim().toLowerCase();
+            if (!seenTexts.has(norm)) {
+                seenTexts.add(norm);
+                conclusions.push({ text: chosen.text, isValid: chosen.isValid });
+                selectedPool.push(chosen);
+            }
+        } else {
+            break;
         }
     }
 
