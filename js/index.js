@@ -424,15 +424,15 @@ function renderCarousel() {
         carouselNextButton.disabled = true;
         enableConfirmationButtons();
         if (h2) {
-            h2.style.padding = "0 15px";
-            h2.style.justifyContent = "space-between";
-            h2.style.transform = "translateY(6px)";
+            h2.style.padding = "";
+            h2.style.justifyContent = "";
+            h2.style.transform = "";
         }
         carouselDisplayLabelType.textContent = "Conclusion";
-        carouselDisplayLabelType.style.fontSize = "0.78em";
-        carouselDisplayLabelType.style.letterSpacing = "0px";
-        carouselDisplayLabelProgress.style.fontSize = "0.8em";
-        carouselDisplayLabelProgress.style.whiteSpace = "nowrap";
+        carouselDisplayLabelType.style.fontSize = "";
+        carouselDisplayLabelType.style.letterSpacing = "";
+        carouselDisplayLabelProgress.style.fontSize = "";
+        carouselDisplayLabelProgress.style.whiteSpace = "";
         carouselDisplayLabelProgress.textContent = conclusions.length > 1 
             ? `${currentConclusionIndex + 1}/${conclusions.length}`
             : "";
