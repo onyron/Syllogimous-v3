@@ -637,12 +637,150 @@ function formatEntity(entity) {
     return `<b>${entity}</b>`;
 }
 
+function extractEntities(str) {
+    if (!str) return [];
+    let clean = str.replace(/<svg[^>]*#junk-(\d+)[^>]*><\/svg>/gi, "[JUNK]$1[/JUNK]");
+    clean = clean.replace(/<[^>]*>/g, "");
+    const entityRegex = /\[JUNK\]\d+\[\/JUNK\]|[A-Z]{3,}/g;
+    return Array.from(new Set(clean.match(entityRegex) || []));
+}
+
+function solveSpatialGraph(premises, baseConclusion, question) {
+    const cleanPremises = (premises || []).map(p => stripHtml(p));
+    const baseClean = stripHtml(baseConclusion || "");
+    const allText = cleanPremises.join(" ") + " " + baseClean;
+    const entities = extractEntities(allText);
+
+    if (entities.length < 2) return null;
+
+    const coords = new Map();
+    const parity = new Map();
+
+    entities.forEach(e => {
+        coords.set(e, null);
+        parity.set(e, undefined);
+    });
+
+    if (entities.length > 0) {
+        coords.set(entities[0], { x: 0, y: 0, z: 0 });
+        parity.set(entities[0], 0);
+    }
+
+    const DIR_VECTORS = {
+        "is North of": { x: 0, y: 1, z: 0 },
+        "is South of": { x: 0, y: -1, z: 0 },
+        "is East of": { x: 1, y: 0, z: 0 },
+        "is West of": { x: -1, y: 0, z: 0 },
+        "is North-East of": { x: 1, y: 1, z: 0 },
+        "is South-East of": { x: 1, y: -1, z: 0 },
+        "is North-West of": { x: -1, y: 1, z: 0 },
+        "is South-West of": { x: -1, y: -1, z: 0 },
+        "is above": { x: 0, y: 0, z: 1 },
+        "is below": { x: 0, y: 0, z: -1 }
+    };
+
+    let changed = true;
+    let passes = 0;
+    while (changed && passes < 25) {
+        changed = false;
+        passes++;
+
+        for (const prem of cleanPremises) {
+            const pEntities = extractEntities(prem);
+            if (pEntities.length < 2) continue;
+            const e1 = pEntities[0];
+            const e2 = pEntities[1];
+
+            for (const [dir, vec] of Object.entries(DIR_VECTORS)) {
+                if (prem.includes(dir)) {
+                    const c1 = coords.get(e1);
+                    const c2 = coords.get(e2);
+
+                    if (c1 && !c2) {
+                        coords.set(e2, {
+                            x: c1.x - vec.x,
+                            y: c1.y - vec.y,
+                            z: c1.z - vec.z
+                        });
+                        changed = true;
+                    } else if (!c1 && c2) {
+                        coords.set(e1, {
+                            x: c2.x + vec.x,
+                            y: c2.y + vec.y,
+                            z: c2.z + vec.z
+                        });
+                        changed = true;
+                    }
+                    break;
+                }
+            }
+
+            if (prem.includes("is same as") || prem.includes("is equal to")) {
+                const p1 = parity.get(e1);
+                const p2 = parity.get(e2);
+                if (p1 !== undefined && p2 === undefined) { parity.set(e2, p1); changed = true; }
+                else if (p2 !== undefined && p1 === undefined) { parity.set(e1, p2); changed = true; }
+            } else if (prem.includes("is opposite") || prem.includes("is not equal to")) {
+                const p1 = parity.get(e1);
+                const p2 = parity.get(e2);
+                if (p1 !== undefined && p2 === undefined) { parity.set(e2, 1 - p1); changed = true; }
+                else if (p2 !== undefined && p1 === undefined) { parity.set(e1, p2); changed = true; }
+            }
+        }
+    }
+
+    return {
+        entities,
+        coords,
+        evaluateRelation: (e1, e2, rel) => {
+            const c1 = coords.get(e1);
+            const c2 = coords.get(e2);
+
+            if (c1 && c2) {
+                const dx = c1.x - c2.x;
+                const dy = c1.y - c2.y;
+                const dz = c1.z - c2.z;
+
+                const matchX = dx > 0 ? "East" : dx < 0 ? "West" : "";
+                const matchY = dy > 0 ? "North" : dy < 0 ? "South" : "";
+
+                let actualRel = "";
+                if (matchY && matchX) actualRel = `is ${matchY}-${matchX} of`;
+                else if (matchY) actualRel = `is ${matchY} of`;
+                else if (matchX) actualRel = `is ${matchX} of`;
+
+                if (rel === "contains") return dx > 0 || dy > 0;
+                if (rel === "is within") return dx < 0 || dy < 0;
+
+                if (actualRel) return rel === actualRel;
+            }
+
+            const p1 = parity.get(e1);
+            const p2 = parity.get(e2);
+            if (p1 !== undefined && p2 !== undefined) {
+                if (rel === "is same as" || rel === "is equal to") return p1 === p2;
+                if (rel.includes("opposite") || rel === "is not equal to") return p1 !== p2;
+            }
+
+            if (baseClean.includes(e1) && baseClean.includes(e2)) {
+                for (const r of Object.keys(RELATION_OPPOSITES)) {
+                    if (baseClean.includes(r)) {
+                        const trueR = question.isValid ? r : RELATION_OPPOSITES[r];
+                        return rel === trueR;
+                    }
+                }
+            }
+
+            return false;
+        }
+    };
+}
+
 function generateUniqueConclusions(question, count) {
     if (!question || !question.conclusion) return [];
 
     const conclusions = [];
     const seenTexts = new Set();
-    const usedEntityPairs = new Set();
 
     const baseConcRaw = question.conclusion;
     const baseConcClean = stripHtml(baseConcRaw);
@@ -654,13 +792,21 @@ function generateUniqueConclusions(question, count) {
     });
     seenTexts.add(baseNormText);
 
+    for (const p of question.premises || []) {
+        seenTexts.add(stripHtml(p).trim().toLowerCase());
+    }
+
     if (count <= 1) return conclusions;
+
+    const harderCheckbox = document.querySelector("#enable-harder-conclusions");
+    const isHarderEnabled = !!(savedata.enableHarderConclusions || (harderCheckbox && harderCheckbox.checked));
+
+    const graph = solveSpatialGraph(question.premises, question.conclusion, question);
 
     const cleanPremises = (question.premises || []).map(p => stripHtml(p));
     const allPremisesText = cleanPremises.join(" ") + " " + baseConcClean;
 
-    const entityRegex = /\[JUNK\]\d+\[\/JUNK\]|[A-Z]{3,}/g;
-    const entities = Array.from(new Set(allPremisesText.match(entityRegex) || []));
+    const entities = extractEntities(allPremisesText);
 
     const knownRelations = Object.keys(RELATION_OPPOSITES);
     const discoveredRelations = new Set();
@@ -680,104 +826,58 @@ function generateUniqueConclusions(question, count) {
     }
 
     const relationsList = Array.from(discoveredRelations);
-
-    const knownPairTrueRelation = new Map();
-
-    const recordTrueRelation = (eA, eB, rel, isVal) => {
-        if (!eA || !eB || !rel) return;
-        const trueRelForAB = isVal ? rel : RELATION_OPPOSITES[rel];
-        if (trueRelForAB) {
-            knownPairTrueRelation.set(`${eA}__${eB}`, trueRelForAB);
-            if (RELATION_OPPOSITES[trueRelForAB]) {
-                knownPairTrueRelation.set(`${eB}__${eA}`, RELATION_OPPOSITES[trueRelForAB]);
-            }
-        }
-    };
-
-    const baseEntities = Array.from(new Set(baseConcClean.match(entityRegex) || []));
-    if (baseEntities.length >= 2) {
-        for (const rel of knownRelations) {
-            if (baseConcClean.includes(rel)) {
-                recordTrueRelation(baseEntities[0], baseEntities[1], rel, question.isValid);
-                usedEntityPairs.add(`${baseEntities[0]}__${baseEntities[1]}`);
-                usedEntityPairs.add(`${baseEntities[1]}__${baseEntities[0]}`);
-                break;
-            }
-        }
-    }
-
-    for (const prem of cleanPremises) {
-        const pEntities = Array.from(new Set(prem.match(entityRegex) || []));
-        if (pEntities.length >= 2) {
-            for (const rel of knownRelations) {
-                if (prem.includes(rel)) {
-                    recordTrueRelation(pEntities[0], pEntities[1], rel, true);
-                    break;
-                }
-            }
-        }
-    }
-
-    const evaluateCandidateValidity = (eA, eB, candidateRel) => {
-        const pairKey = `${eA}__${eB}`;
-        if (knownPairTrueRelation.has(pairKey)) {
-            const actualTrueRel = knownPairTrueRelation.get(pairKey);
-            return candidateRel === actualTrueRel;
-        }
-        return Math.random() < 0.5;
-    };
-
-    const freshPairCandidates = [];
-    const reusedPairCandidates = [];
+    const candidates = [];
 
     if (entities.length >= 2) {
         for (let i = 0; i < entities.length; i++) {
             for (let j = 0; j < entities.length; j++) {
                 if (i === j) continue;
 
-                const pairKey = `${entities[i]}__${entities[j]}`;
-                const isFreshPair = !usedEntityPairs.has(pairKey);
+                const eA = entities[i];
+                const eB = entities[j];
+
+                let distance = 1;
+                if (graph && graph.coords) {
+                    const cA = graph.coords.get(eA);
+                    const cB = graph.coords.get(eB);
+                    if (cA && cB) {
+                        distance = Math.abs(cA.x - cB.x) + Math.abs(cA.y - cB.y) + Math.abs(cA.z - cB.z);
+                    }
+                }
 
                 for (const rel of relationsList) {
-                    const candidateText = `${formatEntity(entities[i])} ${rel} ${formatEntity(entities[j])}`;
+                    const candidateText = `${formatEntity(eA)} ${rel} ${formatEntity(eB)}`;
                     const candidateNorm = stripHtml(candidateText).trim().toLowerCase();
 
                     if (!seenTexts.has(candidateNorm)) {
-                        const isValidCandidate = evaluateCandidateValidity(entities[i], entities[j], rel);
-                        const item = { text: candidateText, isValid: isValidCandidate, pairKey: pairKey };
-
-                        if (isFreshPair) {
-                            freshPairCandidates.push(item);
+                        let isValidCandidate = false;
+                        if (graph && graph.evaluateRelation) {
+                            isValidCandidate = graph.evaluateRelation(eA, eB, rel);
                         } else {
-                            reusedPairCandidates.push(item);
+                            isValidCandidate = Math.random() < 0.5;
                         }
+
+                        candidates.push({
+                            text: candidateText,
+                            isValid: isValidCandidate,
+                            distance: distance
+                        });
                     }
                 }
             }
         }
     }
 
-    const shuffle = (arr) => {
-        for (let i = arr.length - 1; i > 0; i--) {
-            const r = Math.floor(Math.random() * (i + 1));
-            [arr[i], arr[r]] = [arr[r], arr[i]];
-        }
-    };
-
-    shuffle(freshPairCandidates);
-    shuffle(reusedPairCandidates);
-
-    for (const cand of freshPairCandidates) {
-        if (conclusions.length >= count) break;
-        const norm = stripHtml(cand.text).trim().toLowerCase();
-        if (!seenTexts.has(norm)) {
-            seenTexts.add(norm);
-            usedEntityPairs.add(cand.pairKey);
-            conclusions.push({ text: cand.text, isValid: cand.isValid });
-        }
+    for (let i = candidates.length - 1; i > 0; i--) {
+        const r = Math.floor(Math.random() * (i + 1));
+        [candidates[i], candidates[r]] = [candidates[r], candidates[i]];
     }
 
-    for (const cand of reusedPairCandidates) {
+    if (isHarderEnabled) {
+        candidates.sort((a, b) => b.distance - a.distance);
+    }
+
+    for (const cand of candidates) {
         if (conclusions.length >= count) break;
         const norm = stripHtml(cand.text).trim().toLowerCase();
         if (!seenTexts.has(norm)) {
