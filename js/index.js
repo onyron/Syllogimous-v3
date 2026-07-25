@@ -38,6 +38,7 @@ const averageCorrectDisplay = document.getElementById("average-correct-display")
 const percentCorrectDisplay = document.getElementById("percent-correct-display");
 
 let carouselIndex = 0;
+let currentConclusionIndex = 0;
 let carouselEnabled = false;
 let question;
 const carousel = document.querySelector(".carousel");
@@ -186,16 +187,24 @@ function carouselInit() {
 
 function displayInit() {
     const q = renderJunkEmojis(question);
+    const conclusions = q.conclusionsList || [{ text: q.conclusion, isValid: q.isValid }];
+    const currentConc = conclusions[currentConclusionIndex];
+
     displayLabelType.textContent = q.category.split(":")[0];
     displayLabelLevel.textContent = (q.plen || q.premises.length) + "p";
     const easy = savedata.scrambleFactor < 12 ? ' (easy)' : '';
+
+    const concHeader = conclusions.length > 1
+        ? `CONCLUSION ${currentConclusionIndex + 1} OF ${conclusions.length}`
+        : `Conclusion`;
+
     displayText.innerHTML = [
         `<div class="preamble">Premises${easy}</div>`,
         ...q.premises.map(p => `<div class="formatted-premise">${p}</div>`),
         ...((q.operations && q.operations.length > 0) ? ['<div class="transform-header">Transformations</div>'] : []),
         ...(q.operations ? q.operations.map(o => `<div class="formatted-operation">${o}</div>`) : []),
-        '<div class="postamble">Conclusion</div>',
-        '<div class="formatted-conclusion">'+q.conclusion+'</div>',
+        `<div class="postamble">${concHeader}</div>`,
+        `<div class="formatted-conclusion">${currentConc.text}</div>`,
     ].join('');
     const isAnalogy = question?.tags?.includes('analogy');
     const isBinary = question.type === 'binary';
@@ -357,6 +366,8 @@ function renderCarousel() {
         return;
     }
     const q = renderJunkEmojis(question);
+    const conclusions = q.conclusionsList || [{ text: q.conclusion, isValid: q.isValid }];
+    const currentConc = conclusions[currentConclusionIndex];
 
     carousel.classList.add("visible");
     display.classList.remove("visible");
@@ -382,9 +393,11 @@ function renderCarousel() {
     } else {
         carouselNextButton.disabled = true;
         enableConfirmationButtons();
-        carouselDisplayLabelType.textContent = "Conclusion";
+        carouselDisplayLabelType.textContent = conclusions.length > 1 
+            ? `CONCLUSION ${currentConclusionIndex + 1} OF ${conclusions.length}`
+            : "Conclusion";
         carouselDisplayLabelProgress.textContent = "";
-        carouselDisplayText.innerHTML = q.conclusion;
+        carouselDisplayText.innerHTML = currentConc.text;
     }
 }
 
@@ -548,12 +561,55 @@ function generateQuestion() {
     return q;
 }
 
+function generateUniqueConclusions(question, count) {
+    const conclusions = [];
+    const seenTexts = new Set();
+
+    conclusions.push({
+        text: question.conclusion,
+        isValid: question.isValid
+    });
+    seenTexts.add(question.conclusion.trim().toLowerCase());
+
+    let attempts = 0;
+    const maxAttempts = 100;
+
+    while (conclusions.length < count && attempts < maxAttempts) {
+        attempts++;
+        const candidate = (typeof createAlternativeConclusion === 'function') 
+            ? createAlternativeConclusion(question) 
+            : null;
+        if (!candidate) break;
+
+        const normalizedText = candidate.text.trim().toLowerCase();
+        if (!seenTexts.has(normalizedText)) {
+            seenTexts.add(normalizedText);
+            conclusions.push(candidate);
+        }
+    }
+
+    while (conclusions.length < count) {
+        const randomIndex = Math.floor(Math.random() * conclusions.length);
+        conclusions.push({ ...conclusions[randomIndex] });
+    }
+
+    return conclusions;
+}
+
 function init() {
     stopCountDown();
     question = generateQuestion();
     if (!question) {
         return;
     }
+
+    currentConclusionIndex = 0;
+
+    const numConclusions = (savedata.enableMultipleConclusions && savedata.numberOfConclusions > 0) 
+        ? savedata.numberOfConclusions 
+        : 1;
+
+    question.conclusionsList = generateUniqueConclusions(question, numConclusions);
 
     stopCountDown();
     if (timerToggled) {
@@ -706,44 +762,46 @@ function storeQuestionAndSave() {
     save();
 }
 
+function processConclusionAnswer(userAnswer) {
+    if (processingAnswer) return;
+
+    const currentConc = question.conclusionsList[currentConclusionIndex];
+    currentConc.answerUser = userAnswer;
+    currentConc.isCorrect = (userAnswer === currentConc.isValid);
+
+    if (currentConclusionIndex < question.conclusionsList.length - 1) {
+        currentConclusionIndex++;
+        displayInit();
+        renderCarousel();
+    } else {
+        processingAnswer = true;
+        const allCorrect = question.conclusionsList.every(c => c.isCorrect);
+        question.isValid = allCorrect;
+        question.answerUser = allCorrect;
+
+        if (allCorrect) {
+            appState.score++;
+            question.correctness = 'right';
+        } else {
+            appState.score--;
+            question.correctness = 'wrong';
+        }
+
+        question.answeredAt = new Date().getTime();
+        storeQuestionAndSave();
+        renderHQL(true);
+        wowFeedback();
+    }
+}
+
 function checkIfTrue() {
     trueButton.blur();
-    if (processingAnswer) {
-        return;
-    }
-    processingAnswer = true;
-    question.answerUser = true;
-    if (question.isValid) {
-        appState.score++;
-        question.correctness = 'right';
-    } else {
-        appState.score--;
-        question.correctness = 'wrong';
-    }
-    question.answeredAt = new Date().getTime();
-    storeQuestionAndSave();
-    renderHQL(true);
-    wowFeedback();
+    processConclusionAnswer(true);
 }
 
 function checkIfFalse() {
     falseButton.blur();
-    if (processingAnswer) {
-        return;
-    }
-    processingAnswer = true;
-    question.answerUser = false;
-    if (!question.isValid) {
-        appState.score++;
-        question.correctness = 'right';
-    } else {
-        appState.score--;
-        question.correctness = 'wrong';
-    }
-    question.answeredAt = new Date().getTime();
-    storeQuestionAndSave();
-    renderHQL(true);
-    wowFeedback();
+    processConclusionAnswer(false);
 }
 
 function timeElapsed() {
