@@ -864,10 +864,11 @@ input[type="number"]::-moz-inner-spin-button {
 
 .carousel_controls {
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
-    gap: 20px;
     width: 100%;
+    padding: 0 24px;
+    box-sizing: border-box;
     margin: 0.5rem auto 0 auto;
 }
 
