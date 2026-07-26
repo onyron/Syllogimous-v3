@@ -863,8 +863,11 @@ input[type="number"]::-moz-inner-spin-button {
 }
 
 .carousel_controls {
-    display: inline-flex;
-    gap: 150px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    width: 100%;
     margin: 0.5rem auto 0 auto;
 }
 
