@@ -621,10 +621,24 @@ const RELATION_OPPOSITES = {
     "is South-West of": "is North-East of",
     "contains": "is within",
     "is within": "contains",
+    "is above of": "is below of",
+    "is below of": "is above of",
+    "is Above of": "is Below of",
+    "is Below of": "is Above of",
     "is above": "is below",
     "is below": "is above",
+    "is Above": "is Below",
+    "is Below": "is Above",
     "is left of": "is right of",
-    "is right of": "is left of"
+    "is right of": "is left of",
+    "is Below and East of": "is Above and West of",
+    "is Above and West of": "is Below and East of",
+    "is Below and West of": "is Above and East of",
+    "is Above and East of": "is Below and West of",
+    "is Above and North of": "is Below and South of",
+    "is Below and South of": "is Above and North of",
+    "is Above and South of": "is Below and North of",
+    "is Below and North of": "is Above and South of"
 };
 
 function stripHtml(str) {
@@ -706,12 +720,26 @@ function solveSpatialGraph(premises, baseConclusion, question) {
         "South-East of": { x: 1, y: -1, z: 0 },
         "North-West of": { x: -1, y: 1, z: 0 },
         "South-West of": { x: -1, y: -1, z: 0 },
+        "Below and East of": { x: 1, y: 0, z: -1 },
+        "Below and West of": { x: -1, y: 0, z: -1 },
+        "Above and East of": { x: 1, y: 0, z: 1 },
+        "Above and West of": { x: -1, y: 0, z: 1 },
+        "Below and North of": { x: 0, y: 1, z: -1 },
+        "Below and South of": { x: 0, y: -1, z: -1 },
+        "Above and North of": { x: 0, y: 1, z: 1 },
+        "Above and South of": { x: 0, y: -1, z: 1 },
         "North of": { x: 0, y: 1, z: 0 },
         "South of": { x: 0, y: -1, z: 0 },
         "East of": { x: 1, y: 0, z: 0 },
         "West of": { x: -1, y: 0, z: 0 },
+        "above of": { x: 0, y: 0, z: 1 },
+        "below of": { x: 0, y: 0, z: -1 },
+        "Above of": { x: 0, y: 0, z: 1 },
+        "Below of": { x: 0, y: 0, z: -1 },
         "above": { x: 0, y: 0, z: 1 },
         "below": { x: 0, y: 0, z: -1 },
+        "Above": { x: 0, y: 0, z: 1 },
+        "Below": { x: 0, y: 0, z: -1 },
         "left of": { x: -1, y: 0, z: 0 },
         "right of": { x: 1, y: 0, z: 0 },
         "greater than": { x: 1, y: 0, z: 0 },
@@ -736,7 +764,7 @@ function solveSpatialGraph(premises, baseConclusion, question) {
             const premClean = stripHtml(prem);
 
             for (const [dirKey, vec] of Object.entries(DIR_VECTORS)) {
-                if (premClean.includes(dirKey)) {
+                if (premClean.toLowerCase().includes(dirKey.toLowerCase())) {
                     const c1 = coords.get(e1);
                     const c2 = coords.get(e2);
 
@@ -787,12 +815,23 @@ function solveSpatialGraph(premises, baseConclusion, question) {
                 const dy = c1.y - c2.y;
                 const dz = c1.z - c2.z;
 
+                const sx = Math.sign(dx);
+                const sy = Math.sign(dy);
+                const sz = Math.sign(dz);
+
                 for (const [dirKey, vec] of Object.entries(DIR_VECTORS)) {
-                    if (rel.includes(dirKey)) {
-                        const sx = Math.sign(dx);
-                        const sy = Math.sign(dy);
-                        const sz = Math.sign(dz);
-                        return (sx === vec.x) && (sy === vec.y) && (sz === vec.z);
+                    if (rel.toLowerCase().includes(dirKey.toLowerCase())) {
+                        const matchX = (vec.x === 0) || (sx === vec.x);
+                        const matchY = (vec.y === 0) || (sy === vec.y);
+                        const matchZ = (vec.z === 0) || (sz === vec.z);
+
+                        if ((vec.x !== 0 && sx !== vec.x) ||
+                            (vec.y !== 0 && sy !== vec.y) ||
+                            (vec.z !== 0 && sz !== vec.z)) {
+                            return false;
+                        }
+
+                        return matchX && matchY && matchZ;
                     }
                 }
             }
@@ -806,9 +845,9 @@ function solveSpatialGraph(premises, baseConclusion, question) {
 
             if (baseClean.includes(e1) && baseClean.includes(e2)) {
                 for (const r of Object.keys(RELATION_OPPOSITES)) {
-                    if (baseClean.includes(r)) {
+                    if (baseClean.toLowerCase().includes(r.toLowerCase())) {
                         const trueR = question.isValid ? r : RELATION_OPPOSITES[r];
-                        return rel === trueR;
+                        return rel.toLowerCase() === trueR.toLowerCase();
                     }
                 }
             }
@@ -818,8 +857,137 @@ function solveSpatialGraph(premises, baseConclusion, question) {
     };
 }
 
+function generateSyllogismConclusions(question, count) {
+    const baseRaw = question.conclusion;
+    const baseClean = stripHtml(baseRaw);
+    let ents = extractEntities(baseRaw);
+    if (ents.length < 2) {
+        ents = extractEntities((question.premises || []).join(" ") + " " + baseRaw);
+    }
+    if (ents.length < 2) {
+        return [{ text: baseRaw, isValid: question.isValid }];
+    }
+
+    const S = ents[0];
+    const P = ents[ents.length - 1];
+
+    const forms = [
+        `All ${formatEntity(S)} are ${formatEntity(P)}`,
+        `No ${formatEntity(S)} are ${formatEntity(P)}`,
+        `Some ${formatEntity(S)} are ${formatEntity(P)}`,
+        `Some ${formatEntity(S)} are not ${formatEntity(P)}`,
+        `All ${formatEntity(P)} are ${formatEntity(S)}`,
+        `No ${formatEntity(P)} are ${formatEntity(S)}`
+    ];
+
+    const conclusions = [{ text: baseRaw, isValid: question.isValid }];
+    const seen = new Set([stripHtml(baseRaw).trim().toLowerCase()]);
+
+    for (const f of forms) {
+        const norm = stripHtml(f).trim().toLowerCase();
+        if (!seen.has(norm) && conclusions.length < count) {
+            seen.add(norm);
+            let isVal = !question.isValid;
+            if (baseClean.toLowerCase().includes("all") && norm.includes("some ") && !norm.includes("not")) {
+                isVal = question.isValid;
+            } else if (baseClean.toLowerCase().includes("no") && norm.includes("some ") && norm.includes("not")) {
+                isVal = question.isValid;
+            }
+            conclusions.push({ text: f, isValid: isVal });
+        }
+    }
+
+    return conclusions;
+}
+
+function generateAnalogyConclusions(question, count) {
+    const baseRaw = question.conclusion;
+    let ents = extractEntities(baseRaw);
+    if (ents.length < 4) {
+        ents = extractEntities((question.premises || []).join(" ") + " " + baseRaw);
+    }
+    if (ents.length < 4) {
+        return [{ text: baseRaw, isValid: question.isValid }];
+    }
+
+    const [A, B, C, D] = ents;
+
+    const candidates = [
+        { text: `${formatEntity(A)} : ${formatEntity(B)} :: ${formatEntity(C)} : ${formatEntity(D)}`, isValid: question.isValid },
+        { text: `${formatEntity(A)} : ${formatEntity(C)} :: ${formatEntity(B)} : ${formatEntity(D)}`, isValid: question.isValid },
+        { text: `${formatEntity(B)} : ${formatEntity(A)} :: ${formatEntity(D)} : ${formatEntity(C)}`, isValid: question.isValid },
+        { text: `${formatEntity(A)} : ${formatEntity(B)} :: ${formatEntity(D)} : ${formatEntity(C)}`, isValid: !question.isValid },
+        { text: `${formatEntity(B)} : ${formatEntity(A)} :: ${formatEntity(C)} : ${formatEntity(D)}`, isValid: !question.isValid },
+        { text: `${formatEntity(C)} : ${formatEntity(D)} :: ${formatEntity(B)} : ${formatEntity(A)}`, isValid: !question.isValid }
+    ];
+
+    const conclusions = [];
+    const seen = new Set();
+
+    for (const c of candidates) {
+        const norm = stripHtml(c.text).trim().toLowerCase();
+        if (!seen.has(norm) && conclusions.length < count) {
+            seen.add(norm);
+            conclusions.push(c);
+        }
+    }
+
+    return conclusions;
+}
+
+function generateBinaryConclusions(question, count) {
+    const baseRaw = question.conclusion;
+    const baseClean = stripHtml(baseRaw);
+
+    const conclusions = [{ text: baseRaw, isValid: question.isValid }];
+    const seen = new Set([baseClean.trim().toLowerCase()]);
+
+    const mutations = [];
+
+    if (baseRaw.includes("AND")) {
+        mutations.push([baseRaw.replace(/AND/g, "OR"), !question.isValid]);
+    }
+    if (baseRaw.includes("OR")) {
+        mutations.push([baseRaw.replace(/OR/g, "AND"), !question.isValid]);
+    }
+    if (baseRaw.includes("NOT")) {
+        mutations.push([baseRaw.replace(/NOT /g, ""), !question.isValid]);
+    } else {
+        const ents = extractEntities(baseRaw);
+        if (ents.length > 0) {
+            mutations.push([baseRaw.replace(formatEntity(ents[0]), `NOT ${formatEntity(ents[0])}`), !question.isValid]);
+        }
+    }
+    if (baseRaw.includes("->")) {
+        const parts = baseRaw.split("->");
+        if (parts.length === 2) {
+            mutations.push([`${parts[1].trim()} -> ${parts[0].trim()}`, !question.isValid]);
+        }
+    }
+
+    for (const [text, val] of mutations) {
+        const norm = stripHtml(text).trim().toLowerCase();
+        if (!seen.has(norm) && conclusions.length < count) {
+            seen.add(norm);
+            conclusions.push({ text: text, isValid: val });
+        }
+    }
+
+    return conclusions;
+}
+
 function generateUniqueConclusions(question, count) {
     if (!question || !question.conclusion) return [];
+
+    if (question.type === 'syllogism') {
+        return generateSyllogismConclusions(question, count);
+    }
+    if (question?.tags?.includes('analogy')) {
+        return generateAnalogyConclusions(question, count);
+    }
+    if (question.type === 'binary') {
+        return generateBinaryConclusions(question, count);
+    }
 
     const conclusions = [];
     const seenTexts = new Set();
@@ -862,7 +1030,7 @@ function generateUniqueConclusions(question, count) {
     const discoveredRelations = new Set();
 
     for (const rel of knownRelations) {
-        if (allPremisesText.includes(rel)) {
+        if (allPremisesText.toLowerCase().includes(rel.toLowerCase())) {
             discoveredRelations.add(rel);
             if (RELATION_OPPOSITES[rel]) {
                 discoveredRelations.add(RELATION_OPPOSITES[rel]);
@@ -873,6 +1041,8 @@ function generateUniqueConclusions(question, count) {
     if (discoveredRelations.size === 0) {
         discoveredRelations.add("is same as");
         discoveredRelations.add("is opposite of");
+        discoveredRelations.add("is Below of");
+        discoveredRelations.add("is Above of");
     }
 
     const relationsList = Array.from(discoveredRelations);
@@ -991,8 +1161,9 @@ function generateUniqueConclusions(question, count) {
         let mutatedValid = source.isValid;
 
         for (const [rel, opp] of Object.entries(RELATION_OPPOSITES)) {
-            if (source.text.includes(rel)) {
-                mutatedText = source.text.replace(rel, opp);
+            const regex = new RegExp(rel, "gi");
+            if (regex.test(source.text)) {
+                mutatedText = source.text.replace(regex, opp);
                 mutatedValid = !source.isValid;
                 break;
             }
@@ -1016,9 +1187,34 @@ function generateUniqueConclusions(question, count) {
         }
     }
 
-    while (conclusions.length < count) {
-        const source = conclusions[Math.floor(Math.random() * conclusions.length)];
-        conclusions.push({ ...source });
+    let fallbackAttempts = 0;
+    while (conclusions.length < count && fallbackAttempts < 100) {
+        fallbackAttempts++;
+        if (entities.length >= 2) {
+            const eA = entities[Math.floor(Math.random() * entities.length)];
+            let eB = entities[Math.floor(Math.random() * entities.length)];
+            while (eA === eB) {
+                eB = entities[Math.floor(Math.random() * entities.length)];
+            }
+            const rels = Object.keys(RELATION_OPPOSITES);
+            const rel = rels[Math.floor(Math.random() * rels.length)];
+            const candText = `${formatEntity(eA)} ${rel} ${formatEntity(eB)}`;
+            const candNorm = stripHtml(candText).trim().toLowerCase();
+
+            if (!seenTexts.has(candNorm)) {
+                seenTexts.add(candNorm);
+                let candValid = false;
+                if (graph && graph.evaluateRelation) {
+                    candValid = graph.evaluateRelation(eA, eB, rel);
+                }
+                if (candValid === null) {
+                    candValid = (fallbackAttempts % 2 === 0);
+                }
+                conclusions.push({ text: candText, isValid: candValid });
+            }
+        } else {
+            break;
+        }
     }
 
     return conclusions;
