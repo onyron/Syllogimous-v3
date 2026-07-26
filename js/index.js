@@ -638,7 +638,15 @@ const RELATION_OPPOSITES = {
     "is Above and North of": "is Below and South of",
     "is Below and South of": "is Above and North of",
     "is Above and South of": "is Below and North of",
-    "is Below and North of": "is Above and South of"
+    "is Below and North of": "is Above and South of",
+    "is Above and North-East of": "is Below and South-West of",
+    "is Below and South-West of": "is Above and North-East of",
+    "is Above and North-West of": "is Below and South-East of",
+    "is Below and South-East of": "is Above and North-West of",
+    "is Above and South-East of": "is Below and North-West of",
+    "is Below and North-West of": "is Above and South-East of",
+    "is Above and South-West of": "is Below and North-East of",
+    "is Below and North-East of": "is Above and South-West of"
 };
 
 function stripHtml(str) {
@@ -654,7 +662,7 @@ function formatEntity(entity) {
 
 function extractEntities(str) {
     if (!str || str.toLowerCase().includes("explainer")) return [];
-    
+
     let clean = str;
     clean = clean.replace(/<svg[^>]*>[\s\S]*?#junk-(\d+)[\s\S]*?<\/svg>/gi, "[JUNK]$1[/JUNK]");
     clean = clean.replace(/<svg[^>]*id=["']junk-(\d+)["'][^>]*>[\s\S]*?<\/svg>/gi, "[JUNK]$1[/JUNK]");
@@ -662,47 +670,103 @@ function extractEntities(str) {
     clean = clean.replace(/#junk-(\d+)/gi, "[JUNK]$1[/JUNK]");
     clean = clean.replace(/\bjunk-(\d+)\b/gi, "[JUNK]$1[/JUNK]");
 
-    const bMatches = Array.from(clean.matchAll(/<b>([^<]+)<\/b>/gi)).map(m => m[1].trim());
-    const junkMatches = Array.from(clean.matchAll(/\[JUNK\]\d+\[\/JUNK\]/gi)).map(m => m[0]);
-    
-    const entities = [];
-    for (const e of [...bMatches, ...junkMatches]) {
-        const item = e.replace(/<[^>]*>/g, "").trim();
-        if (item && !entities.includes(item)) {
-            entities.push(item);
-        }
-    }
-
-    const cleanNoTags = clean.replace(/<[^>]*>/g, "");
     const keywords = new Set([
-        "is", "same", "as", "opposite", "of", "to", "equal", "not", 
-        "greater", "than", "smaller", "faster", "slower", "north", "south", 
-        "east", "west", "north-east", "south-east", "north-west", "south-west", 
+        "is", "same", "as", "opposite", "of", "to", "equal", "not",
+        "greater", "than", "smaller", "faster", "slower", "north", "south",
+        "east", "west", "north-east", "south-east", "north-west", "south-west",
         "above", "below", "left", "right", "contains", "within", "at", "and",
-        "junk"
+        "or", "if", "then", "all", "no", "some", "are", "a", "an", "the",
+        "true", "false", "junk"
     ]);
-    const tokens = cleanNoTags.match(/\b[A-Za-z0-9_-]+\b/g) || [];
-    for (const t of tokens) {
-        const tLow = t.toLowerCase();
-        if (!keywords.has(tLow) && !/^\d+$/.test(t) && t.length >= 2 && !tLow.startsWith("junk") && !tLow.startsWith("[junk]")) {
-            if (!entities.includes(t)) {
-                entities.push(t);
-            }
+
+    const candidates = [];
+    const occupied = [];
+    const explicitPattern = /<b[^>]*>([\s\S]*?)<\/b>|\[JUNK\]\d+\[\/JUNK\]/gi;
+
+    for (const match of clean.matchAll(explicitPattern)) {
+        const value = stripHtml(match[1] || match[0]).trim();
+        if (!value) continue;
+        candidates.push({ index: match.index, value });
+        occupied.push([match.index, match.index + match[0].length]);
+    }
+
+    const textWithSpaces = clean.replace(/<[^>]*>/g, tag => " ".repeat(tag.length));
+    const tokenPattern = /\b[A-Za-z0-9_-]+\b/g;
+
+    for (const match of textWithSpaces.matchAll(tokenPattern)) {
+        const index = match.index;
+        if (occupied.some(([start, finish]) => index >= start && index < finish)) continue;
+
+        const value = match[0];
+        const lower = value.toLowerCase();
+
+        if (keywords.has(lower)) continue;
+        if (/^\d+$/.test(value)) continue;
+        if (lower.startsWith("junk")) continue;
+        if (value.length < 2 && !/^[A-Z]$/.test(value)) continue;
+
+        candidates.push({ index, value });
+    }
+
+    candidates.sort((a, b) => a.index - b.index);
+
+    const entities = [];
+    for (const candidate of candidates) {
+        if (!entities.includes(candidate.value)) {
+            entities.push(candidate.value);
         }
     }
 
-    return entities.filter(e => e.toLowerCase() !== "junk" && !(e.toLowerCase().startsWith("junk") && !e.toUpperCase().startsWith("[JUNK]")));
+    return entities;
+}
+
+function relationToVector(text) {
+    const rel = stripHtml(text).toLowerCase().replace(/\s+/g, " ").trim();
+
+    let x = 0;
+    let y = 0;
+    let z = 0;
+
+    if (/\bnorth\b/.test(rel)) y = 1;
+    if (/\bsouth\b/.test(rel)) y = -1;
+    if (/\beast\b/.test(rel)) x = 1;
+    if (/\bwest\b/.test(rel)) x = -1;
+    if (/\babove\b/.test(rel)) z = 1;
+    if (/\bbelow\b/.test(rel)) z = -1;
+
+    if (
+        /\bright\b/.test(rel) ||
+        /\bgreater\b/.test(rel) ||
+        /\bfaster\b/.test(rel) ||
+        /\bcontains\b/.test(rel)
+    ) {
+        x = 1;
+    }
+
+    if (
+        /\bleft\b/.test(rel) ||
+        /\bsmaller\b/.test(rel) ||
+        /\bslower\b/.test(rel) ||
+        /\bwithin\b/.test(rel)
+    ) {
+        x = -1;
+    }
+
+    if (x === 0 && y === 0 && z === 0) return null;
+
+    return { x, y, z };
 }
 
 function solveSpatialGraph(premises, baseConclusion, question) {
     const rawPremises = premises || [];
     const allRaw = [...rawPremises, baseConclusion || ""];
-    
+
     const entities = [];
+
     for (const strVal of allRaw) {
-        for (const e of extractEntities(strVal)) {
-            if (!entities.includes(e)) {
-                entities.push(e);
+        for (const entity of extractEntities(strVal)) {
+            if (!entities.includes(entity)) {
+                entities.push(entity);
             }
         }
     }
@@ -712,148 +776,147 @@ function solveSpatialGraph(premises, baseConclusion, question) {
     const coords = new Map();
     const parity = new Map();
 
-    entities.forEach(e => {
-        coords.set(e, null);
-        parity.set(e, undefined);
-    });
+    for (const entity of entities) {
+        coords.set(entity, null);
+        parity.set(entity, undefined);
+    }
 
-    coords.set(entities[0], { x: 0, y: 0, z: 0 });
-    parity.set(entities[0], 0);
+    for (const premise of rawPremises) {
+        const premiseEntities = extractEntities(premise);
 
-    const DIR_VECTORS = {
-        "North-East of": { x: 1, y: 1, z: 0 },
-        "South-East of": { x: 1, y: -1, z: 0 },
-        "North-West of": { x: -1, y: 1, z: 0 },
-        "South-West of": { x: -1, y: -1, z: 0 },
-        "Below and East of": { x: 1, y: 0, z: -1 },
-        "Below and West of": { x: -1, y: 0, z: -1 },
-        "Above and East of": { x: 1, y: 0, z: 1 },
-        "Above and West of": { x: -1, y: 0, z: 1 },
-        "Below and North of": { x: 0, y: 1, z: -1 },
-        "Below and South of": { x: 0, y: -1, z: -1 },
-        "Above and North of": { x: 0, y: 1, z: 1 },
-        "Above and South of": { x: 0, y: -1, z: 1 },
-        "North of": { x: 0, y: 1, z: 0 },
-        "South of": { x: 0, y: -1, z: 0 },
-        "East of": { x: 1, y: 0, z: 0 },
-        "West of": { x: -1, y: 0, z: 0 },
-        "above of": { x: 0, y: 0, z: 1 },
-        "below of": { x: 0, y: 0, z: -1 },
-        "Above of": { x: 0, y: 0, z: 1 },
-        "Below of": { x: 0, y: 0, z: -1 },
-        "above": { x: 0, y: 0, z: 1 },
-        "below": { x: 0, y: 0, z: -1 },
-        "Above": { x: 0, y: 0, z: 1 },
-        "Below": { x: 0, y: 0, z: -1 },
-        "left of": { x: -1, y: 0, z: 0 },
-        "right of": { x: 1, y: 0, z: 0 },
-        "greater than": { x: 1, y: 0, z: 0 },
-        "smaller than": { x: -1, y: 0, z: 0 },
-        "faster than": { x: 1, y: 0, z: 0 },
-        "slower than": { x: -1, y: 0, z: 0 },
-        "contains": { x: 1, y: 0, z: 0 },
-        "within": { x: -1, y: 0, z: 0 }
-    };
+        if (premiseEntities.length >= 2 && relationToVector(premise)) {
+            coords.set(premiseEntities[0], { x: 0, y: 0, z: 0 });
+            break;
+        }
+    }
+
+    for (const premise of rawPremises) {
+        const premiseEntities = extractEntities(premise);
+        if (premiseEntities.length < 2) continue;
+
+        const lower = stripHtml(premise).toLowerCase();
+
+        if (
+            lower.includes("is same as") ||
+            lower.includes("is equal to") ||
+            lower.includes("is opposite") ||
+            lower.includes("is not equal to")
+        ) {
+            parity.set(premiseEntities[0], 0);
+            break;
+        }
+    }
 
     let changed = true;
     let passes = 0;
+
     while (changed && passes < 30) {
         changed = false;
         passes++;
 
-        for (const prem of rawPremises) {
-            const pEntities = extractEntities(prem);
-            if (pEntities.length < 2) continue;
-            const e1 = pEntities[0];
-            const e2 = pEntities[1];
-            const premClean = stripHtml(prem);
+        for (const premise of rawPremises) {
+            const premiseEntities = extractEntities(premise);
+            if (premiseEntities.length < 2) continue;
 
-            for (const [dirKey, vec] of Object.entries(DIR_VECTORS)) {
-                if (premClean.toLowerCase().includes(dirKey.toLowerCase())) {
-                    const c1 = coords.get(e1);
-                    const c2 = coords.get(e2);
+            const e1 = premiseEntities[0];
+            const e2 = premiseEntities[1];
+            const premiseClean = stripHtml(premise);
+            const lower = premiseClean.toLowerCase();
+            const vector = relationToVector(premiseClean);
 
-                    if (c1 && !c2) {
-                        coords.set(e2, {
-                            x: c1.x - vec.x,
-                            y: c1.y - vec.y,
-                            z: c1.z - vec.z
-                        });
-                        changed = true;
-                    } else if (!c1 && c2) {
-                        coords.set(e1, {
-                            x: c2.x + vec.x,
-                            y: c2.y + vec.y,
-                            z: c2.z + vec.z
-                        });
-                        changed = true;
-                    }
-                    break;
+            if (vector) {
+                const c1 = coords.get(e1);
+                const c2 = coords.get(e2);
+
+                if (c1 && !c2) {
+                    coords.set(e2, {
+                        x: c1.x - vector.x,
+                        y: c1.y - vector.y,
+                        z: c1.z - vector.z
+                    });
+                    changed = true;
+                } else if (!c1 && c2) {
+                    coords.set(e1, {
+                        x: c2.x + vector.x,
+                        y: c2.y + vector.y,
+                        z: c2.z + vector.z
+                    });
+                    changed = true;
                 }
             }
 
-            if (premClean.includes("is same as") || premClean.includes("is equal to")) {
+            if (
+                lower.includes("is same as") ||
+                lower.includes("is equal to")
+            ) {
                 const p1 = parity.get(e1);
                 const p2 = parity.get(e2);
-                if (p1 !== undefined && p2 === undefined) { parity.set(e2, p1); changed = true; }
-                else if (p2 !== undefined && p1 === undefined) { parity.set(e1, p2); changed = true; }
-            } else if (premClean.includes("is opposite") || premClean.includes("is not equal to")) {
+
+                if (p1 !== undefined && p2 === undefined) {
+                    parity.set(e2, p1);
+                    changed = true;
+                } else if (p2 !== undefined && p1 === undefined) {
+                    parity.set(e1, p2);
+                    changed = true;
+                }
+            } else if (
+                lower.includes("is opposite") ||
+                lower.includes("is not equal to")
+            ) {
                 const p1 = parity.get(e1);
                 const p2 = parity.get(e2);
-                if (p1 !== undefined && p2 === undefined) { parity.set(e2, 1 - p1); changed = true; }
-                else if (p2 !== undefined && p1 === undefined) { parity.set(e1, p2); changed = true; }
+
+                if (p1 !== undefined && p2 === undefined) {
+                    parity.set(e2, 1 - p1);
+                    changed = true;
+                } else if (p2 !== undefined && p1 === undefined) {
+                    parity.set(e1, 1 - p2);
+                    changed = true;
+                }
             }
         }
     }
 
-    const baseClean = stripHtml(baseConclusion || "");
-
     return {
         entities,
         coords,
-        evaluateRelation: (e1, e2, rel) => {
-            const c1 = coords.get(e1);
-            const c2 = coords.get(e2);
+        evaluateRelation: (e1, e2, relation) => {
+            const vector = relationToVector(relation);
 
-            if (c1 && c2) {
-                const dx = c1.x - c2.x;
-                const dy = c1.y - c2.y;
-                const dz = c1.z - c2.z;
+            if (vector) {
+                const c1 = coords.get(e1);
+                const c2 = coords.get(e2);
 
-                const sx = Math.sign(dx);
-                const sy = Math.sign(dy);
-                const sz = Math.sign(dz);
+                if (!c1 || !c2) return null;
 
-                for (const [dirKey, vec] of Object.entries(DIR_VECTORS)) {
-                    if (rel.toLowerCase().includes(dirKey.toLowerCase())) {
-                        const matchX = (vec.x === 0) || (sx === vec.x);
-                        const matchY = (vec.y === 0) || (sy === vec.y);
-                        const matchZ = (vec.z === 0) || (sz === vec.z);
+                const sx = Math.sign(c1.x - c2.x);
+                const sy = Math.sign(c1.y - c2.y);
+                const sz = Math.sign(c1.z - c2.z);
 
-                        if ((vec.x !== 0 && sx !== vec.x) ||
-                            (vec.y !== 0 && sy !== vec.y) ||
-                            (vec.z !== 0 && sz !== vec.z)) {
-                            return false;
-                        }
+                if (vector.x !== 0 && sx !== vector.x) return false;
+                if (vector.y !== 0 && sy !== vector.y) return false;
+                if (vector.z !== 0 && sz !== vector.z) return false;
 
-                        return matchX && matchY && matchZ;
-                    }
-                }
+                return true;
             }
 
+            const relationClean = stripHtml(relation).toLowerCase();
             const p1 = parity.get(e1);
             const p2 = parity.get(e2);
-            if (p1 !== undefined && p2 !== undefined) {
-                if (rel === "is same as" || rel === "is equal to") return p1 === p2;
-                if (rel.includes("opposite") || rel === "is not equal to") return p1 !== p2;
-            }
 
-            if (baseClean.includes(e1) && baseClean.includes(e2)) {
-                for (const r of Object.keys(RELATION_OPPOSITES)) {
-                    if (baseClean.toLowerCase().includes(r.toLowerCase())) {
-                        const trueR = question.isValid ? r : RELATION_OPPOSITES[r];
-                        return rel.toLowerCase() === trueR.toLowerCase();
-                    }
+            if (p1 !== undefined && p2 !== undefined) {
+                if (
+                    relationClean.includes("is same as") ||
+                    relationClean.includes("is equal to")
+                ) {
+                    return p1 === p2;
+                }
+
+                if (
+                    relationClean.includes("is opposite") ||
+                    relationClean.includes("is not equal to")
+                ) {
+                    return p1 !== p2;
                 }
             }
 
@@ -864,41 +927,29 @@ function solveSpatialGraph(premises, baseConclusion, question) {
 
 function generateSyllogismConclusions(question, count) {
     const baseRaw = question.conclusion;
-    const baseClean = stripHtml(baseRaw);
-    let ents = extractEntities(baseRaw);
-    if (ents.length < 2) {
-        ents = extractEntities((question.premises || []).join(" ") + " " + baseRaw);
-    }
-    if (ents.length < 2) {
-        return [{ text: baseRaw, isValid: question.isValid }];
-    }
-
-    const S = ents[0];
-    const P = ents[ents.length - 1];
-
-    const forms = [
-        `All ${formatEntity(S)} are ${formatEntity(P)}`,
-        `No ${formatEntity(S)} are ${formatEntity(P)}`,
-        `Some ${formatEntity(S)} are ${formatEntity(P)}`,
-        `Some ${formatEntity(S)} are not ${formatEntity(P)}`,
-        `All ${formatEntity(P)} are ${formatEntity(S)}`,
-        `No ${formatEntity(P)} are ${formatEntity(S)}`
-    ];
-
     const conclusions = [{ text: baseRaw, isValid: question.isValid }];
-    const seen = new Set([stripHtml(baseRaw).trim().toLowerCase()]);
+    if (count <= 1) return conclusions;
 
-    for (const f of forms) {
-        const norm = stripHtml(f).trim().toLowerCase();
-        if (!seen.has(norm) && conclusions.length < count) {
-            seen.add(norm);
-            let isVal = !question.isValid;
-            if (baseClean.toLowerCase().includes("all") && norm.includes("some ") && !norm.includes("not")) {
-                isVal = question.isValid;
-            } else if (baseClean.toLowerCase().includes("no") && norm.includes("some ") && norm.includes("not")) {
-                isVal = question.isValid;
-            }
-            conclusions.push({ text: f, isValid: isVal });
+    const cleanText = stripHtml(baseRaw).trim();
+    const ents = extractEntities(baseRaw);
+    
+    if (ents.length >= 2) {
+        const S = formatEntity(ents[0]);
+        const P = formatEntity(ents[ents.length - 1]);
+        
+        let contradictoryText = "";
+        if (cleanText.startsWith("All ") && cleanText.includes(" are ")) {
+            contradictoryText = `Some ${S} are not ${P}`;
+        } else if (cleanText.startsWith("No ") && cleanText.includes(" are ")) {
+            contradictoryText = `Some ${S} are ${P}`;
+        } else if (cleanText.startsWith("Some ") && cleanText.includes(" are not ")) {
+            contradictoryText = `All ${S} are ${P}`;
+        } else if (cleanText.startsWith("Some ") && cleanText.includes(" are ")) {
+            contradictoryText = `No ${S} are ${P}`;
+        }
+
+        if (contradictoryText) {
+            conclusions.push({ text: contradictoryText, isValid: !question.isValid });
         }
     }
 
@@ -907,33 +958,19 @@ function generateSyllogismConclusions(question, count) {
 
 function generateAnalogyConclusions(question, count) {
     const baseRaw = question.conclusion;
-    let ents = extractEntities(baseRaw);
-    if (ents.length < 4) {
-        ents = extractEntities((question.premises || []).join(" ") + " " + baseRaw);
-    }
-    if (ents.length < 4) {
-        return [{ text: baseRaw, isValid: question.isValid }];
-    }
+    const conclusions = [{ text: baseRaw, isValid: question.isValid }];
+    if (count <= 1) return conclusions;
 
-    const [A, B, C, D] = ents;
-
-    const candidates = [
-        { text: `${formatEntity(A)} : ${formatEntity(B)} :: ${formatEntity(C)} : ${formatEntity(D)}`, isValid: question.isValid },
-        { text: `${formatEntity(A)} : ${formatEntity(C)} :: ${formatEntity(B)} : ${formatEntity(D)}`, isValid: question.isValid },
-        { text: `${formatEntity(B)} : ${formatEntity(A)} :: ${formatEntity(D)} : ${formatEntity(C)}`, isValid: question.isValid },
-        { text: `${formatEntity(A)} : ${formatEntity(B)} :: ${formatEntity(D)} : ${formatEntity(C)}`, isValid: !question.isValid },
-        { text: `${formatEntity(B)} : ${formatEntity(A)} :: ${formatEntity(C)} : ${formatEntity(D)}`, isValid: !question.isValid },
-        { text: `${formatEntity(C)} : ${formatEntity(D)} :: ${formatEntity(B)} : ${formatEntity(A)}`, isValid: !question.isValid }
-    ];
-
-    const conclusions = [];
-    const seen = new Set();
-
-    for (const c of candidates) {
-        const norm = stripHtml(c.text).trim().toLowerCase();
-        if (!seen.has(norm) && conclusions.length < count) {
-            seen.add(norm);
-            conclusions.push(c);
+    const ents = extractEntities(baseRaw);
+    if (ents.length >= 4) {
+        const [A, B, C, D] = ents.map(formatEntity);
+        
+        const symmetric = `${C} : ${D} :: ${A} : ${B}`;
+        conclusions.push({ text: symmetric, isValid: question.isValid });
+        
+        if (question.isValid && conclusions.length < count) {
+            const invalid = `${A} : ${B} :: ${D} : ${C}`;
+            conclusions.push({ text: invalid, isValid: false });
         }
     }
 
@@ -942,39 +979,18 @@ function generateAnalogyConclusions(question, count) {
 
 function generateBinaryConclusions(question, count) {
     const baseRaw = question.conclusion;
-    const baseClean = stripHtml(baseRaw);
-
     const conclusions = [{ text: baseRaw, isValid: question.isValid }];
-    const seen = new Set([baseClean.trim().toLowerCase()]);
+    if (count <= 1) return conclusions;
 
-    const mutations = [];
-
-    if (baseRaw.includes("AND")) {
-        mutations.push([baseRaw.replace(/AND/g, "OR"), !question.isValid]);
-    }
-    if (baseRaw.includes("OR")) {
-        mutations.push([baseRaw.replace(/OR/g, "AND"), !question.isValid]);
-    }
-    if (baseRaw.includes("NOT")) {
-        mutations.push([baseRaw.replace(/NOT /g, ""), !question.isValid]);
-    } else {
-        const ents = extractEntities(baseRaw);
-        if (ents.length > 0) {
-            mutations.push([baseRaw.replace(formatEntity(ents[0]), `NOT ${formatEntity(ents[0])}`), !question.isValid]);
-        }
-    }
-    if (baseRaw.includes("->")) {
-        const parts = baseRaw.split("->");
+    if (baseRaw.includes(" AND ")) {
+        const parts = baseRaw.split(" AND ");
         if (parts.length === 2) {
-            mutations.push([`${parts[1].trim()} -> ${parts[0].trim()}`, !question.isValid]);
+            conclusions.push({ text: `${parts[1].trim()} AND ${parts[0].trim()}`, isValid: question.isValid });
         }
-    }
-
-    for (const [text, val] of mutations) {
-        const norm = stripHtml(text).trim().toLowerCase();
-        if (!seen.has(norm) && conclusions.length < count) {
-            seen.add(norm);
-            conclusions.push({ text: text, isValid: val });
+    } else if (baseRaw.includes(" OR ")) {
+        const parts = baseRaw.split(" OR ");
+        if (parts.length === 2) {
+            conclusions.push({ text: `${parts[1].trim()} OR ${parts[0].trim()}`, isValid: question.isValid });
         }
     }
 
@@ -984,15 +1000,9 @@ function generateBinaryConclusions(question, count) {
 function generateUniqueConclusions(question, count) {
     if (!question || !question.conclusion) return [];
 
-    if (question.type === 'syllogism') {
-        return generateSyllogismConclusions(question, count);
-    }
-    if (question?.tags?.includes('analogy')) {
-        return generateAnalogyConclusions(question, count);
-    }
-    if (question.type === 'binary') {
-        return generateBinaryConclusions(question, count);
-    }
+    if (question.type === 'syllogism') return generateSyllogismConclusions(question, count);
+    if (question?.tags?.includes('analogy')) return generateAnalogyConclusions(question, count);
+    if (question.type === 'binary') return generateBinaryConclusions(question, count);
 
     const conclusions = [];
     const seenTexts = new Set();
@@ -1158,68 +1168,113 @@ function generateUniqueConclusions(question, count) {
         }
     }
 
-    let loopCount = 0;
-    while (conclusions.length < count && loopCount < 50) {
-        loopCount++;
-        const source = conclusions[loopCount % conclusions.length];
-        let mutatedText = source.text;
-        let mutatedValid = source.isValid;
+    const mutationSources = conclusions.slice();
+    const relationEntries = Object.entries(RELATION_OPPOSITES)
+        .sort((a, b) => b[0].length - a[0].length);
 
-        for (const [rel, opp] of Object.entries(RELATION_OPPOSITES)) {
-            const regex = new RegExp(rel, "gi");
-            if (regex.test(source.text)) {
-                mutatedText = source.text.replace(regex, opp);
-                mutatedValid = !source.isValid;
-                break;
-            }
-        }
+    for (const source of mutationSources) {
+        if (conclusions.length >= count) break;
 
-        const norm = stripHtml(mutatedText).trim().toLowerCase();
-        if (!seenTexts.has(norm)) {
-            seenTexts.add(norm);
-            conclusions.push({ text: mutatedText, isValid: mutatedValid });
-        } else {
-            const cleanSource = stripHtml(source.text);
-            const parts = cleanSource.split(" ");
-            if (parts.length >= 3) {
-                const swappedText = `${formatEntity(parts[parts.length - 1])} ${parts.slice(1, parts.length - 1).join(" ")} ${formatEntity(parts[0])}`;
-                const swappedNorm = stripHtml(swappedText).trim().toLowerCase();
-                if (!seenTexts.has(swappedNorm)) {
-                    seenTexts.add(swappedNorm);
-                    conclusions.push({ text: swappedText, isValid: !source.isValid });
+        for (const [relation, opposite] of relationEntries) {
+            const escapedRelation = relation.replace(
+                /[.*+?^${}()|[\]\\]/g,
+                "\\$&"
+            );
+
+            const regex = new RegExp(escapedRelation, "i");
+
+            if (!regex.test(source.text)) continue;
+
+            const mutatedText = source.text.replace(regex, opposite);
+            const mutatedEntities = extractEntities(mutatedText);
+            const mutatedNorm = stripHtml(mutatedText)
+                .trim()
+                .toLowerCase();
+
+            if (
+                mutatedEntities.length >= 2 &&
+                !seenTexts.has(mutatedNorm) &&
+                graph &&
+                graph.evaluateRelation
+            ) {
+                const mutatedValid = graph.evaluateRelation(
+                    mutatedEntities[0],
+                    mutatedEntities[1],
+                    mutatedText
+                );
+
+                if (mutatedValid !== null) {
+                    seenTexts.add(mutatedNorm);
+
+                    conclusions.push({
+                        text: mutatedText,
+                        isValid: mutatedValid
+                    });
                 }
             }
+
+            break;
         }
     }
 
     let fallbackAttempts = 0;
-    while (conclusions.length < count && fallbackAttempts < 100) {
-        fallbackAttempts++;
-        if (entities.length >= 2) {
-            const eA = entities[Math.floor(Math.random() * entities.length)];
-            let eB = entities[Math.floor(Math.random() * entities.length)];
-            while (eA === eB) {
-                eB = entities[Math.floor(Math.random() * entities.length)];
-            }
-            const rels = Object.keys(RELATION_OPPOSITES);
-            const rel = rels[Math.floor(Math.random() * rels.length)];
-            const candText = `${formatEntity(eA)} ${rel} ${formatEntity(eB)}`;
-            const candNorm = stripHtml(candText).trim().toLowerCase();
 
-            if (!seenTexts.has(candNorm)) {
-                seenTexts.add(candNorm);
-                let candValid = false;
-                if (graph && graph.evaluateRelation) {
-                    candValid = graph.evaluateRelation(eA, eB, rel);
-                }
-                if (candValid === null) {
-                    candValid = (fallbackAttempts % 2 === 0);
-                }
-                conclusions.push({ text: candText, isValid: candValid });
-            }
-        } else {
+    while (
+        conclusions.length < count &&
+        fallbackAttempts < 100 &&
+        relationsList.length > 0
+    ) {
+        fallbackAttempts++;
+
+        if (
+            entities.length < 2 ||
+            !graph ||
+            !graph.evaluateRelation
+        ) {
             break;
         }
+
+        const eA = entities[
+            Math.floor(Math.random() * entities.length)
+        ];
+
+        let eB = entities[
+            Math.floor(Math.random() * entities.length)
+        ];
+
+        while (eA === eB) {
+            eB = entities[
+                Math.floor(Math.random() * entities.length)
+            ];
+        }
+
+        const relation = relationsList[
+            Math.floor(Math.random() * relationsList.length)
+        ];
+
+        const candidateText =
+            `${formatEntity(eA)} ${relation} ${formatEntity(eB)}`;
+
+        const candidateNorm = stripHtml(candidateText)
+            .trim()
+            .toLowerCase();
+
+        if (seenTexts.has(candidateNorm)) continue;
+
+        const candidateValid = graph.evaluateRelation(
+            eA,
+            eB,
+            relation
+        );
+
+        if (candidateValid === null) continue;
+
+        seenTexts.add(candidateNorm);
+
+        conclusions.push({
+            text: candidateText,
+            isValid: candidateValid
+        });
     }
 
     return conclusions;
@@ -1416,8 +1471,8 @@ function processConclusionAnswer(userAnswer) {
             renderCarousel();
         } else {
             const allCorrect = question.conclusionsList.every(c => c.isCorrect);
-            question.isValid = allCorrect;
-            question.answerUser = allCorrect;
+            question.allConclusionsCorrect = allCorrect;
+            question.answerUser = question.conclusionsList[0]?.answerUser;
 
             if (allCorrect) {
                 appState.score++;
