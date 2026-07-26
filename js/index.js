@@ -1041,26 +1041,40 @@ function generateUniqueConclusions(question, count) {
         }
     }
 
-    const knownRelations = Object.keys(RELATION_OPPOSITES);
-    const discoveredRelations = new Set();
+const allText = allPremisesText.toLowerCase();
+    const activeRelations = new Set();
 
-    for (const rel of knownRelations) {
-        if (allPremisesText.toLowerCase().includes(rel.toLowerCase())) {
-            discoveredRelations.add(rel);
-            if (RELATION_OPPOSITES[rel]) {
-                discoveredRelations.add(RELATION_OPPOSITES[rel]);
-            }
+    const relationGroups = [
+        ["is same as", "is opposite of", "is equal to", "is not equal to"],
+        ["is greater than", "is smaller than"],
+        ["is faster than", "is slower than"],
+        ["contains", "is within"],
+        ["is left of", "is right of"],
+        [
+            "is North of", "is South of", "is East of", "is West of",
+            "is North-West of", "is South-East of", "is North-East of", "is South-West of",
+            "is above", "is below", "is Above", "is Below",
+            "is Below and East of", "is Above and West of", "is Below and West of", "is Above and East of",
+            "is Above and North of", "is Below and South of", "is Above and South of", "is Below and North of",
+            "is Above and North-East of", "is Below and South-West of", "is Above and North-West of", "is Below and South-East of",
+            "is Above and South-East of", "is Below and North-West of", "is Above and South-West of", "is Below and North-East of"
+        ]
+    ];
+
+    for (const group of relationGroups) {
+        if (group.some(rel => allText.includes(rel.toLowerCase()))) {
+            group.forEach(rel => activeRelations.add(rel));
         }
     }
 
-    if (discoveredRelations.size === 0) {
-        discoveredRelations.add("is same as");
-        discoveredRelations.add("is opposite of");
-        discoveredRelations.add("is Below of");
-        discoveredRelations.add("is Above of");
+    if (activeRelations.size === 0) {
+        activeRelations.add("is same as");
+        activeRelations.add("is opposite of");
+        activeRelations.add("is Below of");
+        activeRelations.add("is Above of");
     }
 
-    const relationsList = Array.from(discoveredRelations);
+    const relationsList = Array.from(activeRelations);
     const candidatePool = [];
 
     if (entities.length >= 2) {
@@ -1070,6 +1084,14 @@ function generateUniqueConclusions(question, count) {
 
                 const eA = entities[i];
                 const eB = entities[j];
+
+                let appearTogether = false;
+                for (const p of cleanPremises) {
+                    if (p.includes(eA) && p.includes(eB)) {
+                        appearTogether = true;
+                        break;
+                    }
+                }
 
                 let distance = 1;
                 let dx = 0, dy = 0, dz = 0;
@@ -1104,7 +1126,8 @@ function generateUniqueConclusions(question, count) {
                                 dy: dy,
                                 dz: dz,
                                 eA: eA,
-                                eB: eB
+                                eB: eB,
+                                appearTogether: appearTogether
                             });
                         }
                     }
@@ -1136,6 +1159,10 @@ function generateUniqueConclusions(question, count) {
             coveredPairs.add(`${s.eB}_${s.eA}`);
         });
 
+        const currentTrueCount = conclusions.filter(c => c.isValid).length;
+        const currentFalseCount = conclusions.filter(c => !c.isValid).length;
+        const needTrue = currentTrueCount <= currentFalseCount;
+
         let bestScore = -Infinity;
         let bestIndex = -1;
 
@@ -1148,6 +1175,10 @@ function generateUniqueConclusions(question, count) {
 
             if (!coveredAxes.has(axis)) score += 5.0;
             if (!coveredPairs.has(pairKey)) score += 2.0;
+
+            if (c.appearTogether) score -= 100.0;
+
+            if (c.isValid === needTrue) score += 50.0;
 
             if (score > bestScore) {
                 bestScore = score;
