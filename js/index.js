@@ -654,11 +654,16 @@ function formatEntity(entity) {
 
 function extractEntities(str) {
     if (!str || str.toLowerCase().includes("explainer")) return [];
-    let clean = str.replace(/<svg[^>]*>.*?#junk-(\d+).*?<\/svg>/gi, "[JUNK]$1[/JUNK]");
-    clean = clean.replace(/#junk-(\d+)/gi, "[JUNK]$1[/JUNK]");
     
+    let clean = str;
+    clean = clean.replace(/<svg[^>]*>[\s\S]*?#junk-(\d+)[\s\S]*?<\/svg>/gi, "[JUNK]$1[/JUNK]");
+    clean = clean.replace(/<svg[^>]*id=["']junk-(\d+)["'][^>]*>[\s\S]*?<\/svg>/gi, "[JUNK]$1[/JUNK]");
+    clean = clean.replace(/<svg[^>]*class=["'][^"']*junk[^"']*["'][^>]*>[\s\S]*?<\/svg>/gi, "[JUNK]$1[/JUNK]");
+    clean = clean.replace(/#junk-(\d+)/gi, "[JUNK]$1[/JUNK]");
+    clean = clean.replace(/\bjunk-(\d+)\b/gi, "[JUNK]$1[/JUNK]");
+
     const bMatches = Array.from(clean.matchAll(/<b>([^<]+)<\/b>/gi)).map(m => m[1].trim());
-    const junkMatches = Array.from(clean.matchAll(/\[JUNK\]\d+\[\/JUNK\]/g)).map(m => m[0]);
+    const junkMatches = Array.from(clean.matchAll(/\[JUNK\]\d+\[\/JUNK\]/gi)).map(m => m[0]);
     
     const entities = [];
     for (const e of [...bMatches, ...junkMatches]) {
@@ -668,25 +673,25 @@ function extractEntities(str) {
         }
     }
 
-    if (entities.length === 0) {
-        const cleanNoTags = clean.replace(/<[^>]*>/g, "");
-        const keywords = new Set([
-            "is", "same", "as", "opposite", "of", "to", "equal", "not", 
-            "greater", "than", "smaller", "faster", "slower", "north", "south", 
-            "east", "west", "north-east", "south-east", "north-west", "south-west", 
-            "above", "below", "left", "right", "contains", "within", "at", "and"
-        ]);
-        const tokens = cleanNoTags.match(/\b[A-Za-z0-9_-]+\b/g) || [];
-        for (const t of tokens) {
-            if (!keywords.has(t.toLowerCase()) && !/^\d+$/.test(t) && t.length >= 2) {
-                if (!entities.includes(t)) {
-                    entities.push(t);
-                }
+    const cleanNoTags = clean.replace(/<[^>]*>/g, "");
+    const keywords = new Set([
+        "is", "same", "as", "opposite", "of", "to", "equal", "not", 
+        "greater", "than", "smaller", "faster", "slower", "north", "south", 
+        "east", "west", "north-east", "south-east", "north-west", "south-west", 
+        "above", "below", "left", "right", "contains", "within", "at", "and",
+        "junk"
+    ]);
+    const tokens = cleanNoTags.match(/\b[A-Za-z0-9_-]+\b/g) || [];
+    for (const t of tokens) {
+        const tLow = t.toLowerCase();
+        if (!keywords.has(tLow) && !/^\d+$/.test(t) && t.length >= 2 && !tLow.startsWith("junk") && !tLow.startsWith("[junk]")) {
+            if (!entities.includes(t)) {
+                entities.push(t);
             }
         }
     }
 
-    return entities;
+    return entities.filter(e => e.toLowerCase() !== "junk" && !(e.toLowerCase().startsWith("junk") && !e.toUpperCase().startsWith("[JUNK]")));
 }
 
 function solveSpatialGraph(premises, baseConclusion, question) {
