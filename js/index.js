@@ -893,9 +893,9 @@ function solveSpatialGraph(premises, baseConclusion, question) {
                 const sy = Math.sign(c1.y - c2.y);
                 const sz = Math.sign(c1.z - c2.z);
 
-                if (vector.x !== 0 && sx !== vector.x) return false;
-                if (vector.y !== 0 && sy !== vector.y) return false;
-                if (vector.z !== 0 && sz !== vector.z) return false;
+                if (sx !== vector.x) return false;
+                if (sy !== vector.y) return false;
+                if (sz !== vector.z) return false;
 
                 return true;
             }
