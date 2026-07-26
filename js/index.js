@@ -195,6 +195,7 @@ function displayInit() {
     const q = renderJunkEmojis(question);
     const conclusions = q.conclusionsList || [{ text: q.conclusion, isValid: q.isValid }];
     const currentConc = conclusions[currentConclusionIndex];
+    const currentConcText = renderJunkEmojis({ conclusion: currentConc.text }).conclusion;
 
     displayLabelType.textContent = q.category.split(":")[0];
     displayLabelLevel.textContent = (q.plen || q.premises.length) + "p";
@@ -210,7 +211,7 @@ function displayInit() {
         ...((q.operations && q.operations.length > 0) ? ['<div class="transform-header">Transformations</div>'] : []),
         ...(q.operations ? q.operations.map(o => `<div class="formatted-operation">${o}</div>`) : []),
         `<div class="postamble">${concHeader}</div>`,
-        `<div class="formatted-conclusion">${currentConc.text}</div>`,
+        `<div class="formatted-conclusion">${currentConcText}</div>`,
     ].join('');
     const isAnalogy = question?.tags?.includes('analogy');
     const isBinary = question.type === 'binary';
