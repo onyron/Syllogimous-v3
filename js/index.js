@@ -1,4 +1,3 @@
-// Get rid of all the PWA stuff
 if ('serviceWorker' in navigator)
     navigator.serviceWorker.getRegistrations()
         .then(registrations => {
@@ -75,7 +74,6 @@ function registerEventHandlers() {
         const value = keySettingMap[key];
         const input = document.querySelector("#" + key);
 
-        // Checkbox handler
         if (input.type === "checkbox") {
             const handleCheck = () => {
                 savedata[value] = !!input.checked;
@@ -85,7 +83,6 @@ function registerEventHandlers() {
             input.addEventListener("change", handleCheck);
         }
 
-        // Number handler
         if (input.type === "number") {
             input.addEventListener("input", evt => {
 
@@ -101,7 +98,6 @@ function registerEventHandlers() {
                     if (isKeyNullable(key)) {
                         savedata[value] = null;
                     } else {
-                        // Fix infinite loop on mobile when changing # of premises
                         return;
                     }
                 } else {
@@ -529,6 +525,16 @@ function generateQuestion() {
 
     const generators = [];
     let quota = savedata.premises;
+    const multiCheckbox = document.querySelector("#enable-multiple-conclusions");
+    const harderCheckbox = document.querySelector("#enable-harder-conclusions");
+    const conclusionsInput = document.querySelector("#number-of-conclusions");
+    const multiEnabled = !!(savedata.enableMultipleConclusions || (multiCheckbox && multiCheckbox.checked));
+    const harderEnabled = !!(savedata.enableHarderConclusions || (harderCheckbox && harderCheckbox.checked));
+    const conclusionCount = Math.max(1, savedata.numberOfConclusions || (conclusionsInput ? parseInt(conclusionsInput.value, 10) : 1) || 1);
+    if (multiEnabled && harderEnabled && conclusionCount > 1) {
+        const minimumPremises = Math.ceil((1 + Math.sqrt(1 + 8 * conclusionCount)) / 2);
+        quota = Math.max(quota, minimumPremises);
+    }
     quota = Math.max(2, quota);
     quota = Math.min(quota, maxStimuliAllowed());
 
@@ -997,6 +1003,177 @@ function generateBinaryConclusions(question, count) {
     return conclusions;
 }
 
+function normalizeSemanticEntity(entity) {
+    return stripHtml(entity || "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function relationSemanticInfo(text) {
+    const entities = extractEntities(text);
+    if (entities.length < 2) return null;
+
+    const eA = entities[0];
+    const eB = entities[1];
+    let a = normalizeSemanticEntity(eA);
+    let b = normalizeSemanticEntity(eB);
+    if (!a || !b || a === b) return null;
+
+    const vector = relationToVector(text);
+    const lower = stripHtml(text).toLowerCase().replace(/\s+/g, " ").trim();
+    let kind = null;
+    let value = null;
+
+    if (vector) {
+        kind = "vector";
+        value = [vector.x, vector.y, vector.z];
+    } else if (lower.includes("is same as") || lower.includes("is equal to")) {
+        kind = "parity";
+        value = 0;
+    } else if (lower.includes("is opposite") || lower.includes("is not equal to")) {
+        kind = "parity";
+        value = 1;
+    } else {
+        return null;
+    }
+
+    let reversed = false;
+    if (a > b) {
+        [a, b] = [b, a];
+        reversed = true;
+    }
+
+    if (kind === "vector" && reversed) {
+        value = value.map(v => -v);
+    }
+
+    const pairKey = `${a}\u0001${b}`;
+    const relationKey = kind === "vector" ? value.join(",") : String(value);
+
+    return {
+        eA,
+        eB,
+        pairKey,
+        kind,
+        value,
+        semanticKey: `${kind}\u0001${pairKey}\u0001${relationKey}`
+    };
+}
+
+function buildRelationTopology(premises) {
+    const adjacency = new Map();
+    const directPairs = new Set();
+
+    const addNode = node => {
+        if (!adjacency.has(node)) adjacency.set(node, new Set());
+    };
+
+    for (const premise of premises || []) {
+        const info = relationSemanticInfo(premise);
+        if (!info) continue;
+
+        const a = normalizeSemanticEntity(info.eA);
+        const b = normalizeSemanticEntity(info.eB);
+        if (!a || !b || a === b) continue;
+
+        addNode(a);
+        addNode(b);
+        adjacency.get(a).add(b);
+        adjacency.get(b).add(a);
+        directPairs.add(info.pairKey);
+    }
+
+    return { adjacency, directPairs };
+}
+
+function getRelationPathLength(topology, eA, eB) {
+    if (!topology) return Infinity;
+
+    const start = normalizeSemanticEntity(eA);
+    const target = normalizeSemanticEntity(eB);
+    if (!start || !target) return Infinity;
+    if (start === target) return 0;
+    if (!topology.adjacency.has(start) || !topology.adjacency.has(target)) return Infinity;
+
+    const queue = [[start, 0]];
+    const visited = new Set([start]);
+
+    for (let i = 0; i < queue.length; i++) {
+        const [node, distance] = queue[i];
+        const neighbors = topology.adjacency.get(node) || [];
+
+        for (const neighbor of neighbors) {
+            if (neighbor === target) return distance + 1;
+            if (visited.has(neighbor)) continue;
+            visited.add(neighbor);
+            queue.push([neighbor, distance + 1]);
+        }
+    }
+
+    return Infinity;
+}
+
+function vectorsAreOpposites(a, b) {
+    if (!a || !b || a.kind !== "vector" || b.kind !== "vector") return false;
+    if (a.pairKey !== b.pairKey) return false;
+    return a.value[0] === -b.value[0] && a.value[1] === -b.value[1] && a.value[2] === -b.value[2];
+}
+
+function getCandidateSpatialMeta(eA, eB, relation, text, graph, topology) {
+    const semantic = relationSemanticInfo(text);
+    if (!semantic) return null;
+
+    let dx = 0;
+    let dy = 0;
+    let dz = 0;
+    let actualVector = null;
+
+    if (graph && graph.coords) {
+        const cA = graph.coords.get(eA);
+        const cB = graph.coords.get(eB);
+        if (cA && cB) {
+            dx = cA.x - cB.x;
+            dy = cA.y - cB.y;
+            dz = cA.z - cB.z;
+            actualVector = [Math.sign(dx), Math.sign(dy), Math.sign(dz)];
+        }
+    }
+
+    const relationVector = relationToVector(relation);
+    let mismatchCount = null;
+    let mismatchAxes = [];
+    let relationComplexity = 0;
+    let actualComplexity = 0;
+
+    if (actualVector && relationVector) {
+        const proposed = [relationVector.x, relationVector.y, relationVector.z];
+        const axes = ["x", "y", "z"];
+        mismatchAxes = axes.filter((_, i) => proposed[i] !== actualVector[i]);
+        mismatchCount = mismatchAxes.length;
+        relationComplexity = proposed.filter(v => v !== 0).length;
+        actualComplexity = actualVector.filter(v => v !== 0).length;
+    }
+
+    const pathLength = getRelationPathLength(topology, eA, eB);
+    const coordSpan = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+
+    return {
+        semantic,
+        eA,
+        eB,
+        relation,
+        text,
+        dx,
+        dy,
+        dz,
+        pathLength,
+        coordSpan,
+        directlyStated: topology ? topology.directPairs.has(semantic.pairKey) : false,
+        mismatchCount,
+        mismatchAxes,
+        relationComplexity,
+        actualComplexity
+    };
+}
+
 function generateUniqueConclusions(question, count) {
     if (!question || !question.conclusion) return [];
 
@@ -1006,43 +1183,43 @@ function generateUniqueConclusions(question, count) {
 
     const conclusions = [];
     const seenTexts = new Set();
+    const seenSemantic = new Set();
 
     const baseConcRaw = question.conclusion;
     const baseConcClean = stripHtml(baseConcRaw);
     const baseNormText = baseConcClean.trim().toLowerCase();
+    const baseSemantic = relationSemanticInfo(baseConcRaw);
 
     conclusions.push({
         text: baseConcRaw,
         isValid: question.isValid
     });
     seenTexts.add(baseNormText);
+    if (baseSemantic) seenSemantic.add(baseSemantic.semanticKey);
 
     for (const p of question.premises || []) {
         seenTexts.add(stripHtml(p).trim().toLowerCase());
+        const premiseSemantic = relationSemanticInfo(p);
+        if (premiseSemantic) seenSemantic.add(premiseSemantic.semanticKey);
     }
 
     if (count <= 1) return conclusions;
 
     const harderCheckbox = document.querySelector("#enable-harder-conclusions");
     const isHarderEnabled = !!(savedata.enableHarderConclusions || (harderCheckbox && harderCheckbox.checked));
-
     const graph = solveSpatialGraph(question.premises, question.conclusion, question);
-
+    const topology = buildRelationTopology(question.premises);
     const cleanPremises = (question.premises || []).map(p => stripHtml(p));
     const allPremisesText = cleanPremises.join(" ") + " " + baseConcClean;
+    const allText = allPremisesText.toLowerCase();
 
     const entities = [];
     const allRaw = [...(question.premises || []), question.conclusion || ""];
     for (const s of allRaw) {
         for (const e of extractEntities(s)) {
-            if (!entities.includes(e)) {
-                entities.push(e);
-            }
+            if (!entities.includes(e)) entities.push(e);
         }
     }
-
-const allText = allPremisesText.toLowerCase();
-    const activeRelations = new Set();
 
     const relationGroups = [
         ["is same as", "is opposite of", "is equal to", "is not equal to"],
@@ -1061,6 +1238,7 @@ const allText = allPremisesText.toLowerCase();
         ]
     ];
 
+    const activeRelations = new Set();
     for (const group of relationGroups) {
         if (group.some(rel => allText.includes(rel.toLowerCase()))) {
             group.forEach(rel => activeRelations.add(rel));
@@ -1074,10 +1252,23 @@ const allText = allPremisesText.toLowerCase();
         activeRelations.add("is Above of");
     }
 
-    const relationsList = Array.from(activeRelations);
-    const candidatePool = [];
+    const hasXDimension = /\b(east|west|left|right|greater|smaller|faster|slower|contains|within)\b/.test(allText);
+    const hasYDimension = /\b(north|south)\b/.test(allText);
+    const hasZDimension = /\b(above|below)\b/.test(allText);
 
-    if (entities.length >= 2) {
+    const relationsList = Array.from(activeRelations).filter(rel => {
+        const vector = relationToVector(rel);
+        if (!vector) return true;
+        if (vector.x !== 0 && !hasXDimension) return false;
+        if (vector.y !== 0 && !hasYDimension) return false;
+        if (vector.z !== 0 && !hasZDimension) return false;
+        return true;
+    });
+
+    const candidatePool = [];
+    const poolSemantic = new Set(seenSemantic);
+
+    if (entities.length >= 2 && graph && graph.evaluateRelation) {
         for (let i = 0; i < entities.length; i++) {
             for (let j = 0; j < entities.length; j++) {
                 if (i === j) continue;
@@ -1085,52 +1276,22 @@ const allText = allPremisesText.toLowerCase();
                 const eA = entities[i];
                 const eB = entities[j];
 
-                let appearTogether = false;
-                for (const p of cleanPremises) {
-                    if (p.includes(eA) && p.includes(eB)) {
-                        appearTogether = true;
-                        break;
-                    }
-                }
-
-                let distance = 1;
-                let dx = 0, dy = 0, dz = 0;
-
-                if (graph && graph.coords) {
-                    const cA = graph.coords.get(eA);
-                    const cB = graph.coords.get(eB);
-                    if (cA && cB) {
-                        dx = cA.x - cB.x;
-                        dy = cA.y - cB.y;
-                        dz = cA.z - cB.z;
-                        distance = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
-                    }
-                }
-
                 for (const rel of relationsList) {
                     const candidateText = `${formatEntity(eA)} ${rel} ${formatEntity(eB)}`;
                     const candidateNorm = stripHtml(candidateText).trim().toLowerCase();
+                    if (seenTexts.has(candidateNorm)) continue;
 
-                    if (!seenTexts.has(candidateNorm)) {
-                        let isValidCandidate = null;
-                        if (graph && graph.evaluateRelation) {
-                            isValidCandidate = graph.evaluateRelation(eA, eB, rel);
-                        }
+                    const meta = getCandidateSpatialMeta(eA, eB, rel, candidateText, graph, topology);
+                    if (!meta || poolSemantic.has(meta.semantic.semanticKey)) continue;
 
-                        if (isValidCandidate !== null) {
-                            candidatePool.push({
-                                text: candidateText,
-                                isValid: isValidCandidate,
-                                distance: distance,
-                                dx: dx,
-                                dy: dy,
-                                dz: dz,
-                                eA: eA,
-                                eB: eB,
-                                appearTogether: appearTogether
-                            });
-                        }
-                    }
+                    const isValidCandidate = graph.evaluateRelation(eA, eB, rel);
+                    if (isValidCandidate === null) continue;
+
+                    poolSemantic.add(meta.semantic.semanticKey);
+                    candidatePool.push({
+                        ...meta,
+                        isValid: isValidCandidate
+                    });
                 }
             }
         }
@@ -1141,44 +1302,87 @@ const allText = allPremisesText.toLowerCase();
         [candidatePool[i], candidatePool[r]] = [candidatePool[r], candidatePool[i]];
     }
 
-    const getPrimaryAxis = (c) => {
-        const absX = Math.abs(c.dx);
-        const absY = Math.abs(c.dy);
-        const absZ = Math.abs(c.dz);
-        if (absX >= absY && absX >= absZ) return 'X';
-        if (absY >= absX && absY >= absZ) return 'Y';
-        return 'Z';
-    };
-
     const selectedPool = [];
-    while (conclusions.length < count && candidatePool.length > 0) {
-        const coveredAxes = new Set(selectedPool.map(getPrimaryAxis));
-        const coveredPairs = new Set();
-        selectedPool.forEach(s => {
-            coveredPairs.add(`${s.eA}_${s.eB}`);
-            coveredPairs.add(`${s.eB}_${s.eA}`);
-        });
+    if (baseSemantic) {
+        const baseEntities = extractEntities(baseConcRaw);
+        if (baseEntities.length >= 2) {
+            const baseMeta = getCandidateSpatialMeta(
+                baseEntities[0],
+                baseEntities[1],
+                baseConcRaw,
+                baseConcRaw,
+                graph,
+                topology
+            );
+            if (baseMeta) selectedPool.push({ ...baseMeta, isValid: question.isValid });
+        }
+    }
 
-        const currentTrueCount = conclusions.filter(c => c.isValid).length;
-        const currentFalseCount = conclusions.filter(c => !c.isValid).length;
-        const needTrue = currentTrueCount <= currentFalseCount;
+    const desiredTrueCount = count > 1
+        ? Math.max(1, Math.min(count - 1, Math.round(count * (0.35 + Math.random() * 0.3))))
+        : +question.isValid;
+
+    while (conclusions.length < count && candidatePool.length > 0) {
+        const pairUseCount = new Map();
+        const coveredErrorAxes = new Set();
+
+        for (const selected of selectedPool) {
+            const pairKey = selected.semantic?.pairKey;
+            if (pairKey) pairUseCount.set(pairKey, (pairUseCount.get(pairKey) || 0) + 1);
+            for (const axis of selected.mismatchAxes || []) coveredErrorAxes.add(axis);
+        }
+
+        const trueCount = conclusions.filter(c => c.isValid).length;
+        const falseCount = conclusions.length - trueCount;
+        const desiredFalseCount = count - desiredTrueCount;
+        const remainingSlots = count - conclusions.length;
+        const trueNeeded = Math.max(0, desiredTrueCount - trueCount);
+        const falseNeeded = Math.max(0, desiredFalseCount - falseCount);
+        let forcedValidity = null;
+        if (trueNeeded >= remainingSlots) forcedValidity = true;
+        else if (falseNeeded >= remainingSlots) forcedValidity = false;
+        const canForceValidity = forcedValidity === null || candidatePool.some(c => c.isValid === forcedValidity);
 
         let bestScore = -Infinity;
         let bestIndex = -1;
 
         for (let idx = 0; idx < candidatePool.length; idx++) {
             const c = candidatePool[idx];
-            let score = isHarderEnabled ? c.distance : 1;
+            if (forcedValidity !== null && canForceValidity && c.isValid !== forcedValidity) continue;
+            const pairUses = pairUseCount.get(c.semantic.pairKey) || 0;
+            const finitePath = Number.isFinite(c.pathLength) ? c.pathLength : 0;
+            let score = Math.random() * 0.75;
 
-            const axis = getPrimaryAxis(c);
-            const pairKey = `${c.eA}_${c.eB}`;
+            if (isHarderEnabled) {
+                score += finitePath * 36;
+                score += Math.min(c.coordSpan, 6) * 2.5;
+                if (c.directlyStated) score -= 95;
+                if (finitePath >= 2) score += 24;
+                if (pairUses === 0) score += 26;
+                else score -= pairUses * 40;
 
-            if (!coveredAxes.has(axis)) score += 5.0;
-            if (!coveredPairs.has(pairKey)) score += 2.0;
+                if (!c.isValid && c.mismatchCount !== null) {
+                    if (c.mismatchCount === 1) score += 22;
+                    else if (c.mismatchCount === 2) score += 7;
+                    else score -= 5;
 
-            if (c.appearTogether) score -= 100.0;
+                    if (c.relationComplexity === c.actualComplexity) score += 9;
+                    if ((c.mismatchAxes || []).some(axis => !coveredErrorAxes.has(axis))) score += 7;
+                }
+            } else {
+                score += finitePath * 3;
+                if (c.directlyStated) score -= 12;
+                if (pairUses === 0) score += 3;
+            }
 
-            if (c.isValid === needTrue) score += 50.0;
+            if (c.isValid && trueCount < desiredTrueCount) score += 13;
+            if (!c.isValid && falseCount < desiredFalseCount) score += 13;
+            if (c.isValid && trueCount >= desiredTrueCount) score -= 4;
+            if (!c.isValid && falseCount >= desiredFalseCount) score -= 4;
+
+            if (selectedPool.some(selected => vectorsAreOpposites(selected.semantic, c.semantic))) {
+                score -= isHarderEnabled ? 55 : 18;
+            }
 
             if (score > bestScore) {
                 bestScore = score;
@@ -1186,126 +1390,16 @@ const allText = allPremisesText.toLowerCase();
             }
         }
 
-        if (bestIndex !== -1) {
-            const chosen = candidatePool.splice(bestIndex, 1)[0];
-            const norm = stripHtml(chosen.text).trim().toLowerCase();
-            if (!seenTexts.has(norm)) {
-                seenTexts.add(norm);
-                conclusions.push({ text: chosen.text, isValid: chosen.isValid });
-                selectedPool.push(chosen);
-            }
-        } else {
-            break;
-        }
-    }
+        if (bestIndex < 0) break;
 
-    const mutationSources = conclusions.slice();
-    const relationEntries = Object.entries(RELATION_OPPOSITES)
-        .sort((a, b) => b[0].length - a[0].length);
+        const chosen = candidatePool.splice(bestIndex, 1)[0];
+        const norm = stripHtml(chosen.text).trim().toLowerCase();
+        if (seenTexts.has(norm) || seenSemantic.has(chosen.semantic.semanticKey)) continue;
 
-    for (const source of mutationSources) {
-        if (conclusions.length >= count) break;
-
-        for (const [relation, opposite] of relationEntries) {
-            const escapedRelation = relation.replace(
-                /[.*+?^${}()|[\]\\]/g,
-                "\\$&"
-            );
-
-            const regex = new RegExp(escapedRelation, "i");
-
-            if (!regex.test(source.text)) continue;
-
-            const mutatedText = source.text.replace(regex, opposite);
-            const mutatedEntities = extractEntities(mutatedText);
-            const mutatedNorm = stripHtml(mutatedText)
-                .trim()
-                .toLowerCase();
-
-            if (
-                mutatedEntities.length >= 2 &&
-                !seenTexts.has(mutatedNorm) &&
-                graph &&
-                graph.evaluateRelation
-            ) {
-                const mutatedValid = graph.evaluateRelation(
-                    mutatedEntities[0],
-                    mutatedEntities[1],
-                    mutatedText
-                );
-
-                if (mutatedValid !== null) {
-                    seenTexts.add(mutatedNorm);
-
-                    conclusions.push({
-                        text: mutatedText,
-                        isValid: mutatedValid
-                    });
-                }
-            }
-
-            break;
-        }
-    }
-
-    let fallbackAttempts = 0;
-
-    while (
-        conclusions.length < count &&
-        fallbackAttempts < 100 &&
-        relationsList.length > 0
-    ) {
-        fallbackAttempts++;
-
-        if (
-            entities.length < 2 ||
-            !graph ||
-            !graph.evaluateRelation
-        ) {
-            break;
-        }
-
-        const eA = entities[
-            Math.floor(Math.random() * entities.length)
-        ];
-
-        let eB = entities[
-            Math.floor(Math.random() * entities.length)
-        ];
-
-        while (eA === eB) {
-            eB = entities[
-                Math.floor(Math.random() * entities.length)
-            ];
-        }
-
-        const relation = relationsList[
-            Math.floor(Math.random() * relationsList.length)
-        ];
-
-        const candidateText =
-            `${formatEntity(eA)} ${relation} ${formatEntity(eB)}`;
-
-        const candidateNorm = stripHtml(candidateText)
-            .trim()
-            .toLowerCase();
-
-        if (seenTexts.has(candidateNorm)) continue;
-
-        const candidateValid = graph.evaluateRelation(
-            eA,
-            eB,
-            relation
-        );
-
-        if (candidateValid === null) continue;
-
-        seenTexts.add(candidateNorm);
-
-        conclusions.push({
-            text: candidateText,
-            isValid: candidateValid
-        });
+        seenTexts.add(norm);
+        seenSemantic.add(chosen.semantic.semanticKey);
+        conclusions.push({ text: chosen.text, isValid: chosen.isValid });
+        selectedPool.push(chosen);
     }
 
     return conclusions;
@@ -1740,7 +1834,6 @@ function renderFolder(arrowId, contentId, isOpen) {
     }
 }
 
-// Events
 timerInput.addEventListener("input", evt => {
     const el = evt.target;
     timerTime = el.value;
