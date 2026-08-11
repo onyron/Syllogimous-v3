@@ -525,16 +525,6 @@ function generateQuestion() {
 
     const generators = [];
     let quota = savedata.premises;
-    const multiCheckbox = document.querySelector("#enable-multiple-conclusions");
-    const harderCheckbox = document.querySelector("#enable-harder-conclusions");
-    const conclusionsInput = document.querySelector("#number-of-conclusions");
-    const multiEnabled = !!(savedata.enableMultipleConclusions || (multiCheckbox && multiCheckbox.checked));
-    const harderEnabled = !!(savedata.enableHarderConclusions || (harderCheckbox && harderCheckbox.checked));
-    const conclusionCount = Math.max(1, savedata.numberOfConclusions || (conclusionsInput ? parseInt(conclusionsInput.value, 10) : 1) || 1);
-    if (multiEnabled && harderEnabled && conclusionCount > 1) {
-        const minimumPremises = Math.ceil((1 + Math.sqrt(1 + 8 * conclusionCount)) / 2);
-        quota = Math.max(quota, minimumPremises);
-    }
     quota = Math.max(2, quota);
     quota = Math.min(quota, maxStimuliAllowed());
 
@@ -1019,8 +1009,8 @@ function relationSemanticInfo(text) {
 
     const vector = relationToVector(text);
     const lower = stripHtml(text).toLowerCase().replace(/\s+/g, " ").trim();
-    let kind = null;
-    let value = null;
+    let kind;
+    let value;
 
     if (vector) {
         kind = "vector";
@@ -1035,14 +1025,9 @@ function relationSemanticInfo(text) {
         return null;
     }
 
-    let reversed = false;
     if (a > b) {
         [a, b] = [b, a];
-        reversed = true;
-    }
-
-    if (kind === "vector" && reversed) {
-        value = value.map(v => -v);
+        if (kind === "vector") value = value.map(v => -v);
     }
 
     const pairKey = `${a}\u0001${b}`;
@@ -1060,7 +1045,8 @@ function relationSemanticInfo(text) {
 
 function buildRelationTopology(premises) {
     const adjacency = new Map();
-    const directPairs = new Set();
+    const edgeKeys = new Set();
+    const premiseSemanticKeys = new Set();
 
     const addNode = node => {
         if (!adjacency.has(node)) adjacency.set(node, new Set());
@@ -1078,48 +1064,109 @@ function buildRelationTopology(premises) {
         addNode(b);
         adjacency.get(a).add(b);
         adjacency.get(b).add(a);
-        directPairs.add(info.pairKey);
+        edgeKeys.add(info.pairKey);
+        premiseSemanticKeys.add(info.semanticKey);
     }
 
-    return { adjacency, directPairs };
+    return { adjacency, edgeKeys, premiseSemanticKeys };
 }
 
-function getRelationPathLength(topology, eA, eB) {
-    if (!topology) return Infinity;
-
+function getRelationPath(topology, eA, eB) {
     const start = normalizeSemanticEntity(eA);
     const target = normalizeSemanticEntity(eB);
-    if (!start || !target) return Infinity;
-    if (start === target) return 0;
-    if (!topology.adjacency.has(start) || !topology.adjacency.has(target)) return Infinity;
+    if (!topology || !start || !target) return null;
+    if (start === target) return { length: 0, edges: [] };
+    if (!topology.adjacency.has(start) || !topology.adjacency.has(target)) return null;
 
-    const queue = [[start, 0]];
-    const visited = new Set([start]);
+    const queue = [start];
+    const parent = new Map([[start, null]]);
 
     for (let i = 0; i < queue.length; i++) {
-        const [node, distance] = queue[i];
-        const neighbors = topology.adjacency.get(node) || [];
+        const node = queue[i];
+        if (node === target) break;
 
-        for (const neighbor of neighbors) {
-            if (neighbor === target) return distance + 1;
-            if (visited.has(neighbor)) continue;
-            visited.add(neighbor);
-            queue.push([neighbor, distance + 1]);
+        for (const neighbor of topology.adjacency.get(node) || []) {
+            if (parent.has(neighbor)) continue;
+            parent.set(neighbor, node);
+            queue.push(neighbor);
         }
     }
 
-    return Infinity;
+    if (!parent.has(target)) return null;
+
+    const nodes = [];
+    let current = target;
+    while (current !== null) {
+        nodes.push(current);
+        current = parent.get(current);
+    }
+    nodes.reverse();
+
+    const edges = [];
+    for (let i = 0; i < nodes.length - 1; i++) {
+        const a = nodes[i] < nodes[i + 1] ? nodes[i] : nodes[i + 1];
+        const b = nodes[i] < nodes[i + 1] ? nodes[i + 1] : nodes[i];
+        edges.push(`${a}\u0001${b}`);
+    }
+
+    return { length: edges.length, edges };
 }
 
-function vectorsAreOpposites(a, b) {
-    if (!a || !b || a.kind !== "vector" || b.kind !== "vector") return false;
-    if (a.pairKey !== b.pairKey) return false;
-    return a.value[0] === -b.value[0] && a.value[1] === -b.value[1] && a.value[2] === -b.value[2];
+function pathBand(pathLength) {
+    if (pathLength <= 1) return "direct";
+    if (pathLength === 2) return "infer2";
+    return "infer3";
 }
 
-function getCandidateSpatialMeta(eA, eB, relation, text, graph, topology) {
+function shuffleArray(items) {
+    for (let i = items.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [items[i], items[j]] = [items[j], items[i]];
+    }
+    return items;
+}
+
+function weightedPick(items, weightFn) {
+    if (!items.length) return null;
+    const weights = items.map(item => Math.max(0, weightFn(item)));
+    const total = weights.reduce((a, b) => a + b, 0);
+    if (total <= 0) return items[Math.floor(Math.random() * items.length)];
+
+    let value = Math.random() * total;
+    for (let i = 0; i < items.length; i++) {
+        value -= weights[i];
+        if (value <= 0) return items[i];
+    }
+    return items[items.length - 1];
+}
+
+function getActiveSpatialDimensions(premises) {
+    const active = { x: false, y: false, z: false };
+    for (const premise of premises || []) {
+        const vector = relationToVector(premise);
+        if (!vector) continue;
+        if (vector.x !== 0) active.x = true;
+        if (vector.y !== 0) active.y = true;
+        if (vector.z !== 0) active.z = true;
+    }
+    return active;
+}
+
+function relationUsesInactiveDimension(relation, active) {
+    const vector = relationToVector(relation);
+    if (!vector) return false;
+    if (vector.x !== 0 && !active.x) return true;
+    if (vector.y !== 0 && !active.y) return true;
+    if (vector.z !== 0 && !active.z) return true;
+    return false;
+}
+
+function createConclusionCandidate(eA, eB, relation, text, graph, topology, isValid, isBase = false) {
     const semantic = relationSemanticInfo(text);
     if (!semantic) return null;
+
+    const path = getRelationPath(topology, eA, eB);
+    if (!path) return null;
 
     let dx = 0;
     let dy = 0;
@@ -1137,41 +1184,75 @@ function getCandidateSpatialMeta(eA, eB, relation, text, graph, topology) {
         }
     }
 
-    const relationVector = relationToVector(relation);
+    const proposedVector = relationToVector(relation);
     let mismatchCount = null;
     let mismatchAxes = [];
-    let relationComplexity = 0;
-    let actualComplexity = 0;
 
-    if (actualVector && relationVector) {
-        const proposed = [relationVector.x, relationVector.y, relationVector.z];
+    if (actualVector && proposedVector) {
+        const proposed = [proposedVector.x, proposedVector.y, proposedVector.z];
         const axes = ["x", "y", "z"];
         mismatchAxes = axes.filter((_, i) => proposed[i] !== actualVector[i]);
         mismatchCount = mismatchAxes.length;
-        relationComplexity = proposed.filter(v => v !== 0).length;
-        actualComplexity = actualVector.filter(v => v !== 0).length;
+    } else if (semantic.kind === "parity") {
+        mismatchCount = isValid ? 0 : 1;
     }
 
-    const pathLength = getRelationPathLength(topology, eA, eB);
-    const coordSpan = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
-
     return {
+        text,
+        isValid,
+        isBase,
         semantic,
         eA,
         eB,
         relation,
-        text,
-        dx,
-        dy,
-        dz,
-        pathLength,
-        coordSpan,
-        directlyStated: topology ? topology.directPairs.has(semantic.pairKey) : false,
+        pathLength: path.length,
+        pathEdges: path.edges,
+        band: pathBand(path.length),
+        directlyStated: path.length === 1,
+        premiseEquivalent: topology.premiseSemanticKeys.has(semantic.semanticKey),
         mismatchCount,
         mismatchAxes,
-        relationComplexity,
-        actualComplexity
+        coordSpan: Math.abs(dx) + Math.abs(dy) + Math.abs(dz)
     };
+}
+
+function makePathTargets(count, baseCandidate, candidatePool) {
+    if (count <= 0) return [];
+
+    const available = new Set(candidatePool.map(c => c.band));
+    const targets = [];
+    const baseBand = baseCandidate?.band;
+    const hasDirect = available.has("direct") || baseBand === "direct";
+    const hasIndirect = available.has("infer2") || available.has("infer3") || (baseBand && baseBand !== "direct");
+
+    if (hasDirect && hasIndirect) {
+        if (baseBand === "direct") {
+            const indirect = available.has("infer2") && available.has("infer3")
+                ? (Math.random() < 0.62 ? "infer2" : "infer3")
+                : (available.has("infer2") ? "infer2" : "infer3");
+            if (available.has(indirect)) targets.push(indirect);
+        } else if (baseBand === "infer2" || baseBand === "infer3") {
+            if (available.has("direct")) targets.push("direct");
+        } else if (count >= 2) {
+            if (available.has("direct")) targets.push("direct");
+            const indirect = available.has("infer2") ? "infer2" : "infer3";
+            if (available.has(indirect)) targets.push(indirect);
+        }
+    }
+
+    while (targets.length < count) {
+        const bands = Array.from(available);
+        if (!bands.length) break;
+        const picked = weightedPick(bands, band => {
+            if (band === "direct") return 0.36;
+            if (band === "infer2") return 0.44;
+            return 0.20;
+        });
+        targets.push(picked);
+    }
+
+    while (targets.length < count) targets.push(null);
+    return shuffleArray(targets);
 }
 
 function generateUniqueConclusions(question, count) {
@@ -1181,41 +1262,27 @@ function generateUniqueConclusions(question, count) {
     if (question?.tags?.includes('analogy')) return generateAnalogyConclusions(question, count);
     if (question.type === 'binary') return generateBinaryConclusions(question, count);
 
-    const conclusions = [];
-    const seenTexts = new Set();
-    const seenSemantic = new Set();
+    const base = {
+        text: question.conclusion,
+        isValid: question.isValid,
+        isBase: true
+    };
 
-    const baseConcRaw = question.conclusion;
-    const baseConcClean = stripHtml(baseConcRaw);
-    const baseNormText = baseConcClean.trim().toLowerCase();
-    const baseSemantic = relationSemanticInfo(baseConcRaw);
-
-    conclusions.push({
-        text: baseConcRaw,
-        isValid: question.isValid
-    });
-    seenTexts.add(baseNormText);
-    if (baseSemantic) seenSemantic.add(baseSemantic.semanticKey);
-
-    for (const p of question.premises || []) {
-        seenTexts.add(stripHtml(p).trim().toLowerCase());
-        const premiseSemantic = relationSemanticInfo(p);
-        if (premiseSemantic) seenSemantic.add(premiseSemantic.semanticKey);
-    }
-
-    if (count <= 1) return conclusions;
+    if (count <= 1) return [base];
 
     const harderCheckbox = document.querySelector("#enable-harder-conclusions");
     const isHarderEnabled = !!(savedata.enableHarderConclusions || (harderCheckbox && harderCheckbox.checked));
     const graph = solveSpatialGraph(question.premises, question.conclusion, question);
+    if (!graph || !graph.evaluateRelation) return [base];
+
     const topology = buildRelationTopology(question.premises);
-    const cleanPremises = (question.premises || []).map(p => stripHtml(p));
-    const allPremisesText = cleanPremises.join(" ") + " " + baseConcClean;
-    const allText = allPremisesText.toLowerCase();
+    const premises = question.premises || [];
+    const premiseTexts = new Set(premises.map(p => stripHtml(p).trim().toLowerCase()));
+    const premisePlainText = premises.map(p => stripHtml(p)).join(" ").toLowerCase();
+    const activeDimensions = getActiveSpatialDimensions(premises);
 
     const entities = [];
-    const allRaw = [...(question.premises || []), question.conclusion || ""];
-    for (const s of allRaw) {
+    for (const s of [...premises, question.conclusion || ""]) {
         for (const e of extractEntities(s)) {
             if (!entities.includes(e)) entities.push(e);
         }
@@ -1240,35 +1307,63 @@ function generateUniqueConclusions(question, count) {
 
     const activeRelations = new Set();
     for (const group of relationGroups) {
-        if (group.some(rel => allText.includes(rel.toLowerCase()))) {
-            group.forEach(rel => activeRelations.add(rel));
+        if (group.some(rel => premisePlainText.includes(rel.toLowerCase()))) {
+            for (const rel of group) {
+                if (!relationUsesInactiveDimension(rel, activeDimensions)) activeRelations.add(rel);
+            }
         }
     }
 
     if (activeRelations.size === 0) {
-        activeRelations.add("is same as");
-        activeRelations.add("is opposite of");
-        activeRelations.add("is Below of");
-        activeRelations.add("is Above of");
+        const baseText = stripHtml(question.conclusion).toLowerCase();
+        for (const group of relationGroups) {
+            if (group.some(rel => baseText.includes(rel.toLowerCase()))) {
+                for (const rel of group) activeRelations.add(rel);
+            }
+        }
     }
 
-    const hasXDimension = /\b(east|west|left|right|greater|smaller|faster|slower|contains|within)\b/.test(allText);
-    const hasYDimension = /\b(north|south)\b/.test(allText);
-    const hasZDimension = /\b(above|below)\b/.test(allText);
-
-    const relationsList = Array.from(activeRelations).filter(rel => {
-        const vector = relationToVector(rel);
-        if (!vector) return true;
-        if (vector.x !== 0 && !hasXDimension) return false;
-        if (vector.y !== 0 && !hasYDimension) return false;
-        if (vector.z !== 0 && !hasZDimension) return false;
-        return true;
-    });
-
+    const relationsList = Array.from(activeRelations);
     const candidatePool = [];
-    const poolSemantic = new Set(seenSemantic);
+    const poolSemanticKeys = new Set();
 
-    if (entities.length >= 2 && graph && graph.evaluateRelation) {
+    const addCandidate = (eA, eB, relation, text, isValid, isBase = false) => {
+        const normText = stripHtml(text).trim().toLowerCase();
+        if (!isBase && premiseTexts.has(normText)) return;
+
+        const candidate = createConclusionCandidate(
+            eA,
+            eB,
+            relation,
+            text,
+            graph,
+            topology,
+            isValid,
+            isBase
+        );
+
+        if (!candidate) return;
+        if (poolSemanticKeys.has(candidate.semantic.semanticKey)) return;
+        poolSemanticKeys.add(candidate.semantic.semanticKey);
+        candidatePool.push(candidate);
+    };
+
+    const baseEntities = extractEntities(question.conclusion);
+    let baseCandidate = null;
+    if (baseEntities.length >= 2) {
+        baseCandidate = createConclusionCandidate(
+            baseEntities[0],
+            baseEntities[1],
+            question.conclusion,
+            question.conclusion,
+            graph,
+            topology,
+            question.isValid,
+            true
+        );
+    }
+
+    if (entities.length >= 2) {
         for (let i = 0; i < entities.length; i++) {
             for (let j = 0; j < entities.length; j++) {
                 if (i === j) continue;
@@ -1276,133 +1371,128 @@ function generateUniqueConclusions(question, count) {
                 const eA = entities[i];
                 const eB = entities[j];
 
-                for (const rel of relationsList) {
-                    const candidateText = `${formatEntity(eA)} ${rel} ${formatEntity(eB)}`;
-                    const candidateNorm = stripHtml(candidateText).trim().toLowerCase();
-                    if (seenTexts.has(candidateNorm)) continue;
-
-                    const meta = getCandidateSpatialMeta(eA, eB, rel, candidateText, graph, topology);
-                    if (!meta || poolSemantic.has(meta.semantic.semanticKey)) continue;
-
-                    const isValidCandidate = graph.evaluateRelation(eA, eB, rel);
-                    if (isValidCandidate === null) continue;
-
-                    poolSemantic.add(meta.semantic.semanticKey);
-                    candidatePool.push({
-                        ...meta,
-                        isValid: isValidCandidate
-                    });
+                for (const relation of relationsList) {
+                    const text = `${formatEntity(eA)} ${relation} ${formatEntity(eB)}`;
+                    const valid = graph.evaluateRelation(eA, eB, relation);
+                    if (valid === null) continue;
+                    addCandidate(eA, eB, relation, text, valid, false);
                 }
             }
         }
     }
 
-    for (let i = candidatePool.length - 1; i > 0; i--) {
-        const r = Math.floor(Math.random() * (i + 1));
-        [candidatePool[i], candidatePool[r]] = [candidatePool[r], candidatePool[i]];
+    const selected = [];
+    const selectedSemanticKeys = new Set();
+    const selectedPairKeys = new Set();
+    const coveredEdges = new Set();
+    const coveredEntities = new Set();
+    const usedBands = new Map();
+    const usedRelationKeys = new Map();
+
+    const registerSelected = candidate => {
+        selected.push(candidate);
+        selectedSemanticKeys.add(candidate.semantic.semanticKey);
+        selectedPairKeys.add(candidate.semantic.pairKey);
+        for (const edge of candidate.pathEdges || []) coveredEdges.add(edge);
+        coveredEntities.add(normalizeSemanticEntity(candidate.eA));
+        coveredEntities.add(normalizeSemanticEntity(candidate.eB));
+        usedBands.set(candidate.band, (usedBands.get(candidate.band) || 0) + 1);
+        const relationKey = candidate.semantic.kind === "vector"
+            ? candidate.semantic.value.join(",")
+            : `${candidate.semantic.kind}:${candidate.semantic.value}`;
+        usedRelationKeys.set(relationKey, (usedRelationKeys.get(relationKey) || 0) + 1);
+    };
+
+    if (baseCandidate && !poolSemanticKeys.has(baseCandidate.semantic.semanticKey)) {
+        poolSemanticKeys.add(baseCandidate.semantic.semanticKey);
+        candidatePool.push(baseCandidate);
     }
 
-    const selectedPool = [];
-    if (baseSemantic) {
-        const baseEntities = extractEntities(baseConcRaw);
-        if (baseEntities.length >= 2) {
-            const baseMeta = getCandidateSpatialMeta(
-                baseEntities[0],
-                baseEntities[1],
-                baseConcRaw,
-                baseConcRaw,
-                graph,
-                topology
-            );
-            if (baseMeta) selectedPool.push({ ...baseMeta, isValid: question.isValid });
-        }
-    }
+    if (!candidatePool.length) return [base];
 
-    const desiredTrueCount = count > 1
-        ? Math.max(1, Math.min(count - 1, Math.round(count * (0.35 + Math.random() * 0.3))))
-        : +question.isValid;
+    const slots = count;
+    const truthTargets = Array.from({ length: slots }, () => Math.random() < 0.5);
+    const pathTargets = isHarderEnabled
+        ? makePathTargets(slots, null, candidatePool)
+        : Array.from({ length: slots }, () => null);
 
-    while (conclusions.length < count && candidatePool.length > 0) {
-        const pairUseCount = new Map();
-        const coveredErrorAxes = new Set();
+    for (let slot = 0; slot < slots; slot++) {
+        let available = candidatePool.filter(c => !selectedSemanticKeys.has(c.semantic.semanticKey));
+        if (!available.length) break;
 
-        for (const selected of selectedPool) {
-            const pairKey = selected.semantic?.pairKey;
-            if (pairKey) pairUseCount.set(pairKey, (pairUseCount.get(pairKey) || 0) + 1);
-            for (const axis of selected.mismatchAxes || []) coveredErrorAxes.add(axis);
-        }
+        const targetTruth = truthTargets[slot];
+        const truthMatched = available.filter(c => c.isValid === targetTruth);
+        if (truthMatched.length) available = truthMatched;
 
-        const trueCount = conclusions.filter(c => c.isValid).length;
-        const falseCount = conclusions.length - trueCount;
-        const desiredFalseCount = count - desiredTrueCount;
-        const remainingSlots = count - conclusions.length;
-        const trueNeeded = Math.max(0, desiredTrueCount - trueCount);
-        const falseNeeded = Math.max(0, desiredFalseCount - falseCount);
-        let forcedValidity = null;
-        if (trueNeeded >= remainingSlots) forcedValidity = true;
-        else if (falseNeeded >= remainingSlots) forcedValidity = false;
-        const canForceValidity = forcedValidity === null || candidatePool.some(c => c.isValid === forcedValidity);
+        const unusedPairCandidates = available.filter(c => !selectedPairKeys.has(c.semantic.pairKey));
+        if (unusedPairCandidates.length) available = unusedPairCandidates;
 
-        let bestScore = -Infinity;
-        let bestIndex = -1;
+        const targetBand = pathTargets[slot];
+        const exactBand = targetBand ? available.filter(c => c.band === targetBand) : [];
+        const bandPool = exactBand.length ? exactBand : available;
 
-        for (let idx = 0; idx < candidatePool.length; idx++) {
-            const c = candidatePool[idx];
-            if (forcedValidity !== null && canForceValidity && c.isValid !== forcedValidity) continue;
-            const pairUses = pairUseCount.get(c.semantic.pairKey) || 0;
-            const finitePath = Number.isFinite(c.pathLength) ? c.pathLength : 0;
-            let score = Math.random() * 0.75;
+        const scored = bandPool.map(candidate => {
+            let score = Math.random() * 18;
+            const newEdges = (candidate.pathEdges || []).filter(edge => !coveredEdges.has(edge)).length;
+            const newEntities = [candidate.eA, candidate.eB]
+                .map(normalizeSemanticEntity)
+                .filter(e => !coveredEntities.has(e)).length;
+            const relationKey = candidate.semantic.kind === "vector"
+                ? candidate.semantic.value.join(",")
+                : `${candidate.semantic.kind}:${candidate.semantic.value}`;
+            const relationUses = usedRelationKeys.get(relationKey) || 0;
+            const bandUses = usedBands.get(candidate.band) || 0;
 
             if (isHarderEnabled) {
-                score += finitePath * 36;
-                score += Math.min(c.coordSpan, 6) * 2.5;
-                if (c.directlyStated) score -= 95;
-                if (finitePath >= 2) score += 24;
-                if (pairUses === 0) score += 26;
-                else score -= pairUses * 40;
+                score += newEdges * 16;
+                score += newEntities * 7;
+                score -= relationUses * 6;
+                score -= bandUses * 2;
 
-                if (!c.isValid && c.mismatchCount !== null) {
-                    if (c.mismatchCount === 1) score += 22;
-                    else if (c.mismatchCount === 2) score += 7;
-                    else score -= 5;
+                if (targetBand && candidate.band === targetBand) score += 34;
+                if (candidate.directlyStated && candidate.premiseEquivalent) score += 7;
 
-                    if (c.relationComplexity === c.actualComplexity) score += 9;
-                    if ((c.mismatchAxes || []).some(axis => !coveredErrorAxes.has(axis))) score += 7;
+                if (!candidate.isValid && candidate.mismatchCount !== null) {
+                    if (candidate.mismatchCount === 1) score += 18;
+                    else if (candidate.mismatchCount === 2) score += 7;
+                    else score -= 4;
                 }
+
+                if (candidate.isValid && candidate.premiseEquivalent) score += 4;
+                if (candidate.pathLength >= 3 && targetBand !== "infer3") score -= 4;
             } else {
-                score += finitePath * 3;
-                if (c.directlyStated) score -= 12;
-                if (pairUses === 0) score += 3;
+                score += newEdges * 4;
+                score += newEntities * 2;
+                score -= relationUses * 2;
             }
 
-            if (c.isValid && trueCount < desiredTrueCount) score += 13;
-            if (!c.isValid && falseCount < desiredFalseCount) score += 13;
-            if (c.isValid && trueCount >= desiredTrueCount) score -= 4;
-            if (!c.isValid && falseCount >= desiredFalseCount) score -= 4;
+            return { candidate, score };
+        });
 
-            if (selectedPool.some(selected => vectorsAreOpposites(selected.semantic, c.semantic))) {
-                score -= isHarderEnabled ? 55 : 18;
-            }
-
-            if (score > bestScore) {
-                bestScore = score;
-                bestIndex = idx;
-            }
-        }
-
-        if (bestIndex < 0) break;
-
-        const chosen = candidatePool.splice(bestIndex, 1)[0];
-        const norm = stripHtml(chosen.text).trim().toLowerCase();
-        if (seenTexts.has(norm) || seenSemantic.has(chosen.semantic.semanticKey)) continue;
-
-        seenTexts.add(norm);
-        seenSemantic.add(chosen.semantic.semanticKey);
-        conclusions.push({ text: chosen.text, isValid: chosen.isValid });
-        selectedPool.push(chosen);
+        scored.sort((a, b) => b.score - a.score);
+        const top = scored.slice(0, Math.min(4, scored.length));
+        const chosenEntry = weightedPick(top, entry => Math.exp(entry.score / 18));
+        const chosen = chosenEntry ? chosenEntry.candidate : scored[0].candidate;
+        registerSelected(chosen);
     }
 
-    return conclusions;
+    if (selected.length < count) {
+        let remaining = candidatePool.filter(c => !selectedSemanticKeys.has(c.semantic.semanticKey));
+        shuffleArray(remaining);
+        for (const candidate of remaining) {
+            if (selected.length >= count) break;
+            registerSelected(candidate);
+        }
+    }
+
+    const result = selected.slice(0, count).map(c => ({
+        text: c.text,
+        isValid: c.isValid,
+        pathLength: c.pathLength,
+        direct: c.pathLength === 1
+    }));
+
+    return shuffleArray(result);
 }
 
 function init() {
@@ -1422,7 +1512,16 @@ function init() {
 
     const numConclusions = isMultiEnabled ? Math.max(1, countVal) : 1;
 
+    const originalConclusion = question.conclusion;
+    const originalIsValid = question.isValid;
     question.conclusionsList = generateUniqueConclusions(question, numConclusions);
+
+    if (question.conclusionsList.length > 1) {
+        question.originalConclusion = originalConclusion;
+        question.originalIsValid = originalIsValid;
+        question.conclusion = question.conclusionsList[0].text;
+        question.isValid = question.conclusionsList[0].isValid;
+    }
 
     stopCountDown();
     if (timerToggled) {
@@ -1585,40 +1684,37 @@ function processConclusionAnswer(userAnswer) {
     currentConc.answerUser = userAnswer;
     currentConc.isCorrect = (userAnswer === currentConc.isValid);
 
-    const isCorrectStep = currentConc.isCorrect;
-    const isLastStep = (currentConclusionIndex >= question.conclusionsList.length - 1);
+    const isLastStep = currentConclusionIndex >= question.conclusionsList.length - 1;
 
-    const onFeedbackFinished = () => {
-        if (!isLastStep) {
-            currentConclusionIndex++;
-            processingAnswer = false;
-            displayInit();
-            renderCarousel();
-        } else {
-            const allCorrect = question.conclusionsList.every(c => c.isCorrect);
-            question.allConclusionsCorrect = allCorrect;
-            question.answerUser = question.conclusionsList[0]?.answerUser;
+    if (!isLastStep) {
+        currentConclusionIndex++;
+        processingAnswer = false;
+        displayInit();
+        renderCarousel();
+        return;
+    }
 
-            if (allCorrect) {
-                appState.score++;
-                question.correctness = 'right';
-            } else {
-                appState.score--;
-                question.correctness = 'wrong';
-            }
+    const allCorrect = question.conclusionsList.every(c => c.isCorrect);
+    const primaryConclusion = question.conclusionsList[0];
+    question.allConclusionsCorrect = allCorrect;
+    question.answerUser = primaryConclusion?.answerUser;
 
-            question.answeredAt = new Date().getTime();
-            storeQuestionAndSave();
-            renderHQL(true);
-            init();
-            processingAnswer = false;
-        }
-    };
-
-    if (isCorrectStep) {
-        wowFeedbackRight(onFeedbackFinished);
+    if (allCorrect) {
+        appState.score++;
+        question.correctness = 'right';
     } else {
-        wowFeedbackWrong(onFeedbackFinished);
+        appState.score--;
+        question.correctness = 'wrong';
+    }
+
+    question.answeredAt = new Date().getTime();
+    storeQuestionAndSave();
+    renderHQL(true);
+
+    if (allCorrect) {
+        wowFeedbackRight(init);
+    } else {
+        wowFeedbackWrong(init);
     }
 }
 
