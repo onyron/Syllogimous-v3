@@ -287,7 +287,6 @@ function populateProgressionDropdown() {
     timeDropper.style.display = isAuto ? 'none' : 'flex';
 }
 
-
 function handleColorChange(event) {
     const color = event.target.value;
     if (appState.darkMode) {
@@ -580,7 +579,7 @@ function generateQuestion() {
         return;
 
     const totalWeight = generators.reduce((sum, item) => sum + item.weight, 0);
-    const randomValue = Math.random() * totalWeight;
+    const randomValue = randomUnit() * totalWeight;
     let cumulativeWeight = 0;
     let q;
     for (let generator of generators) {
@@ -597,12 +596,12 @@ function generateQuestion() {
     return q;
 }
 
-const RELATION_OPPOSITES = {
-    "is same as": "is opposite of",
-    "is opposite of": "is same as",
-    "is opposite to": "is same as",
-    "is equal to": "is not equal to",
-    "is not equal to": "is equal to",
+const RELATION_INVERSES = {
+    "is same as": "is same as",
+    "is opposite of": "is opposite of",
+    "is opposite to": "is opposite to",
+    "is equal to": "is equal to",
+    "is not equal to": "is not equal to",
     "is greater than": "is smaller than",
     "is smaller than": "is greater than",
     "is faster than": "is slower than",
@@ -644,6 +643,15 @@ const RELATION_OPPOSITES = {
     "is Above and South-West of": "is Below and North-East of",
     "is Below and North-East of": "is Above and South-West of"
 };
+
+function randomUnit() {
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+        const value = new Uint32Array(1);
+        crypto.getRandomValues(value);
+        return value[0] / 4294967296;
+    }
+    return Math.random();
+}
 
 function stripHtml(str) {
     if (!str) return "";
@@ -1120,7 +1128,7 @@ function pathBand(pathLength) {
 
 function shuffleArray(items) {
     for (let i = items.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = Math.floor(randomUnit() * (i + 1));
         [items[i], items[j]] = [items[j], items[i]];
     }
     return items;
@@ -1130,9 +1138,9 @@ function weightedPick(items, weightFn) {
     if (!items.length) return null;
     const weights = items.map(item => Math.max(0, weightFn(item)));
     const total = weights.reduce((a, b) => a + b, 0);
-    if (total <= 0) return items[Math.floor(Math.random() * items.length)];
+    if (total <= 0) return items[Math.floor(randomUnit() * items.length)];
 
-    let value = Math.random() * total;
+    let value = randomUnit() * total;
     for (let i = 0; i < items.length; i++) {
         value -= weights[i];
         if (value <= 0) return items[i];
@@ -1161,7 +1169,7 @@ function relationUsesInactiveDimension(relation, active) {
     return false;
 }
 
-function createConclusionCandidate(eA, eB, relation, text, graph, topology, isValid, isBase = false) {
+function createConclusionCandidate(eA, eB, relation, text, graph, topology, isValid) {
     const semantic = relationSemanticInfo(text);
     if (!semantic) return null;
 
@@ -1187,20 +1195,25 @@ function createConclusionCandidate(eA, eB, relation, text, graph, topology, isVa
     const proposedVector = relationToVector(relation);
     let mismatchCount = null;
     let mismatchAxes = [];
+    let relationComplexity = 0;
+    let actualComplexity = 0;
 
     if (actualVector && proposedVector) {
         const proposed = [proposedVector.x, proposedVector.y, proposedVector.z];
         const axes = ["x", "y", "z"];
         mismatchAxes = axes.filter((_, i) => proposed[i] !== actualVector[i]);
         mismatchCount = mismatchAxes.length;
+        relationComplexity = proposed.filter(v => v !== 0).length;
+        actualComplexity = actualVector.filter(v => v !== 0).length;
     } else if (semantic.kind === "parity") {
         mismatchCount = isValid ? 0 : 1;
+        relationComplexity = 1;
+        actualComplexity = 1;
     }
 
     return {
         text,
         isValid,
-        isBase,
         semantic,
         eA,
         eB,
@@ -1212,47 +1225,248 @@ function createConclusionCandidate(eA, eB, relation, text, graph, topology, isVa
         premiseEquivalent: topology.premiseSemanticKeys.has(semantic.semanticKey),
         mismatchCount,
         mismatchAxes,
+        relationComplexity,
+        actualComplexity,
         coordSpan: Math.abs(dx) + Math.abs(dy) + Math.abs(dz)
     };
 }
 
-function makePathTargets(count, baseCandidate, candidatePool) {
-    if (count <= 0) return [];
+function buildPairGroups(candidates) {
+    const groups = new Map();
 
-    const available = new Set(candidatePool.map(c => c.band));
-    const targets = [];
-    const baseBand = baseCandidate?.band;
-    const hasDirect = available.has("direct") || baseBand === "direct";
-    const hasIndirect = available.has("infer2") || available.has("infer3") || (baseBand && baseBand !== "direct");
+    for (const candidate of candidates) {
+        const key = candidate.semantic.pairKey;
+        if (!groups.has(key)) {
+            groups.set(key, {
+                pairKey: key,
+                eA: candidate.eA,
+                eB: candidate.eB,
+                pathLength: candidate.pathLength,
+                pathEdges: candidate.pathEdges,
+                band: candidate.band,
+                directlyStated: candidate.directlyStated,
+                candidates: []
+            });
+        }
+        groups.get(key).candidates.push(candidate);
+    }
 
-    if (hasDirect && hasIndirect) {
-        if (baseBand === "direct") {
-            const indirect = available.has("infer2") && available.has("infer3")
-                ? (Math.random() < 0.62 ? "infer2" : "infer3")
-                : (available.has("infer2") ? "infer2" : "infer3");
-            if (available.has(indirect)) targets.push(indirect);
-        } else if (baseBand === "infer2" || baseBand === "infer3") {
-            if (available.has("direct")) targets.push("direct");
-        } else if (count >= 2) {
-            if (available.has("direct")) targets.push("direct");
-            const indirect = available.has("infer2") ? "infer2" : "infer3";
-            if (available.has(indirect)) targets.push(indirect);
+    return Array.from(groups.values()).filter(group => {
+        const hasTrue = group.candidates.some(c => c.isValid);
+        const hasFalse = group.candidates.some(c => !c.isValid);
+        return hasTrue && hasFalse;
+    });
+}
+
+function chooseDirectTarget(count, groups) {
+    const directCount = groups.filter(g => g.band === "direct").length;
+    const indirectCount = groups.length - directCount;
+
+    if (!directCount) return 0;
+    if (!indirectCount) return Math.min(count, directCount);
+    if (count <= 1) return randomUnit() < 0.5 ? 1 : 0;
+
+    const minDirect = 1;
+    const maxDirect = Math.min(count - 1, directCount);
+    if (maxDirect < minDirect) return Math.min(count, directCount);
+
+    const center = count * (0.35 + randomUnit() * 0.3);
+    const options = [];
+    for (let d = minDirect; d <= maxDirect; d++) options.push(d);
+
+    return weightedPick(options, d => {
+        const distance = Math.abs(d - center);
+        return Math.exp(-distance * 0.85) + 0.15;
+    });
+}
+
+function chooseStructuralPairs(groups, count, harderEnabled, topology) {
+    if (!groups.length) return [];
+    if (groups.length <= count) return shuffleArray(groups.slice());
+
+    const targetDirect = harderEnabled ? chooseDirectTarget(count, groups) : null;
+    const selected = [];
+    const selectedKeys = new Set();
+    const coveredEdges = new Set();
+    const entityUse = new Map();
+    let directSelected = 0;
+
+    for (let slot = 0; slot < count; slot++) {
+        const remaining = groups.filter(g => !selectedKeys.has(g.pairKey));
+        if (!remaining.length) break;
+
+        const slotsLeft = count - slot;
+        const directNeeded = targetDirect === null ? null : Math.max(0, targetDirect - directSelected);
+        let structuralPool = remaining;
+
+        if (directNeeded !== null) {
+            if (directNeeded >= slotsLeft) {
+                const onlyDirect = remaining.filter(g => g.band === "direct");
+                if (onlyDirect.length) structuralPool = onlyDirect;
+            } else if (directNeeded === 0) {
+                const onlyIndirect = remaining.filter(g => g.band !== "direct");
+                if (onlyIndirect.length) structuralPool = onlyIndirect;
+            } else {
+                const wantsDirect = randomUnit() < directNeeded / slotsLeft;
+                const preferred = remaining.filter(g => wantsDirect ? g.band === "direct" : g.band !== "direct");
+                if (preferred.length) structuralPool = preferred;
+            }
+        }
+
+        let targetBand = null;
+        if (harderEnabled && structuralPool.some(g => g.band !== "direct")) {
+            const bands = Array.from(new Set(structuralPool.map(g => g.band)));
+            targetBand = weightedPick(bands, band => {
+                if (band === "direct") return 0.35;
+                if (band === "infer2") return 0.45;
+                return 0.20;
+            });
+        }
+
+        const scored = structuralPool.map(group => {
+            const newEdges = group.pathEdges.filter(edge => !coveredEdges.has(edge)).length;
+            const a = normalizeSemanticEntity(group.eA);
+            const b = normalizeSemanticEntity(group.eB);
+            const newEntities = +(entityUse.get(a) === undefined) + +(entityUse.get(b) === undefined);
+            const reusePenalty = (entityUse.get(a) || 0) + (entityUse.get(b) || 0);
+            let score = randomUnit() * 24;
+
+            score += Math.min(newEdges, 2) * 14;
+            score += Math.max(0, newEdges - 2) * 5;
+            score += newEntities * 9;
+            score -= reusePenalty * 5;
+
+            if (harderEnabled) {
+                if (targetBand && group.band === targetBand) score += 18;
+                if (group.band === "direct") score += 4 + randomUnit() * 5;
+                if (group.band === "infer2") score += 5 + randomUnit() * 6;
+                if (group.band === "infer3") score += randomUnit() * 8;
+                if (group.pathLength > 3) score -= (group.pathLength - 3) * 3;
+            }
+
+            return { group, score };
+        });
+
+        scored.sort((a, b) => b.score - a.score);
+        const top = scored.slice(0, Math.min(5, scored.length));
+        const chosenEntry = weightedPick(top, item => Math.exp(item.score / 16));
+        const chosen = chosenEntry ? chosenEntry.group : scored[0].group;
+
+        selected.push(chosen);
+        selectedKeys.add(chosen.pairKey);
+        if (chosen.band === "direct") directSelected++;
+        for (const edge of chosen.pathEdges) coveredEdges.add(edge);
+        const a = normalizeSemanticEntity(chosen.eA);
+        const b = normalizeSemanticEntity(chosen.eB);
+        entityUse.set(a, (entityUse.get(a) || 0) + 1);
+        entityUse.set(b, (entityUse.get(b) || 0) + 1);
+    }
+
+    if (harderEnabled && topology && selected.length === count) {
+        let improved = true;
+        let passes = 0;
+
+        while (improved && passes < 3) {
+            improved = false;
+            passes++;
+
+            const currentCoverage = new Set(selected.flatMap(g => g.pathEdges)).size;
+            const currentEntities = new Set(selected.flatMap(g => [normalizeSemanticEntity(g.eA), normalizeSemanticEntity(g.eB)])).size;
+
+            for (let i = 0; i < selected.length && !improved; i++) {
+                for (const replacement of groups) {
+                    if (selectedKeys.has(replacement.pairKey)) continue;
+                    const test = selected.slice();
+                    test[i] = replacement;
+                    if (targetDirect !== null && test.filter(g => g.band === "direct").length !== targetDirect) continue;
+
+                    const edgeCoverage = new Set(test.flatMap(g => g.pathEdges)).size;
+                    const entityCoverage = new Set(test.flatMap(g => [normalizeSemanticEntity(g.eA), normalizeSemanticEntity(g.eB)])).size;
+                    const gain = (edgeCoverage - currentCoverage) * 3 + (entityCoverage - currentEntities);
+
+                    if (gain > 0 && randomUnit() < 0.85) {
+                        selectedKeys.delete(selected[i].pairKey);
+                        selected[i] = replacement;
+                        selectedKeys.add(replacement.pairKey);
+                        improved = true;
+                        break;
+                    }
+                }
+            }
         }
     }
 
-    while (targets.length < count) {
-        const bands = Array.from(available);
-        if (!bands.length) break;
-        const picked = weightedPick(bands, band => {
-            if (band === "direct") return 0.36;
-            if (band === "infer2") return 0.44;
-            return 0.20;
-        });
-        targets.push(picked);
+    return shuffleArray(selected);
+}
+
+function candidateRelationKey(candidate) {
+    if (candidate.semantic.kind === "vector") return candidate.semantic.value.join(",");
+    return `${candidate.semantic.kind}:${candidate.semantic.value}`;
+}
+
+function chooseCandidateForTruth(group, targetTruth, harderEnabled, usedRelationKeys) {
+    let pool = group.candidates.filter(c => c.isValid === targetTruth);
+    if (!pool.length) pool = group.candidates.slice();
+
+    const scored = pool.map(candidate => {
+        const relationKey = candidateRelationKey(candidate);
+        const relationReuse = usedRelationKeys.get(relationKey) || 0;
+        let score = randomUnit() * 14 - relationReuse * 8;
+
+        if (harderEnabled && !candidate.isValid) {
+            if (candidate.mismatchCount === 1) score += 30;
+            else if (candidate.mismatchCount === 2) score += 8;
+            else if (candidate.mismatchCount !== null) score -= 8;
+
+            if (candidate.relationComplexity === candidate.actualComplexity) score += 20;
+            else score -= Math.abs(candidate.relationComplexity - candidate.actualComplexity) * 8;
+        }
+
+        if (harderEnabled && candidate.isValid) {
+            if (candidate.relationComplexity === candidate.actualComplexity) score += 8;
+        }
+
+        return { candidate, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    const top = scored.slice(0, Math.min(4, scored.length));
+    const chosenEntry = weightedPick(top, item => Math.exp(item.score / 14));
+    return chosenEntry ? chosenEntry.candidate : scored[0].candidate;
+}
+
+function normalizePlainText(text) {
+    return stripHtml(text).replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function presentCandidate(candidate, premiseTexts) {
+    const forward = candidate.text;
+    const inverseRelation = RELATION_INVERSES[candidate.relation];
+    const reverse = inverseRelation
+        ? `${formatEntity(candidate.eB)} ${inverseRelation} ${formatEntity(candidate.eA)}`
+        : null;
+
+    const options = [forward, reverse].filter(Boolean);
+    const unique = [];
+    const seen = new Set();
+
+    for (const option of options) {
+        const normalized = normalizePlainText(option);
+        if (seen.has(normalized)) continue;
+        seen.add(normalized);
+        unique.push(option);
     }
 
-    while (targets.length < count) targets.push(null);
-    return shuffleArray(targets);
+    const nonLiteral = unique.filter(option => !premiseTexts.has(normalizePlainText(option)));
+    const available = nonLiteral.length ? nonLiteral : unique;
+    const text = available[Math.floor(randomUnit() * available.length)] || forward;
+
+    return {
+        text,
+        isValid: candidate.isValid,
+        pathLength: candidate.pathLength,
+        direct: candidate.pathLength === 1
+    };
 }
 
 function generateUniqueConclusions(question, count) {
@@ -1262,22 +1476,16 @@ function generateUniqueConclusions(question, count) {
     if (question?.tags?.includes('analogy')) return generateAnalogyConclusions(question, count);
     if (question.type === 'binary') return generateBinaryConclusions(question, count);
 
-    const base = {
-        text: question.conclusion,
-        isValid: question.isValid,
-        isBase: true
-    };
-
-    if (count <= 1) return [base];
+    if (count <= 1) return [{ text: question.conclusion, isValid: question.isValid }];
 
     const harderCheckbox = document.querySelector("#enable-harder-conclusions");
     const isHarderEnabled = !!(savedata.enableHarderConclusions || (harderCheckbox && harderCheckbox.checked));
     const graph = solveSpatialGraph(question.premises, question.conclusion, question);
-    if (!graph || !graph.evaluateRelation) return [base];
+    if (!graph || !graph.evaluateRelation) return [{ text: question.conclusion, isValid: question.isValid }];
 
     const topology = buildRelationTopology(question.premises);
     const premises = question.premises || [];
-    const premiseTexts = new Set(premises.map(p => stripHtml(p).trim().toLowerCase()));
+    const premiseTexts = new Set(premises.map(normalizePlainText));
     const premisePlainText = premises.map(p => stripHtml(p)).join(" ").toLowerCase();
     const activeDimensions = getActiveSpatialDimensions(premises);
 
@@ -1325,12 +1533,9 @@ function generateUniqueConclusions(question, count) {
 
     const relationsList = Array.from(activeRelations);
     const candidatePool = [];
-    const poolSemanticKeys = new Set();
+    const semanticKeys = new Set();
 
-    const addCandidate = (eA, eB, relation, text, isValid, isBase = false) => {
-        const normText = stripHtml(text).trim().toLowerCase();
-        if (!isBase && premiseTexts.has(normText)) return;
-
+    const addCandidate = (eA, eB, relation, text, isValid) => {
         const candidate = createConclusionCandidate(
             eA,
             eB,
@@ -1338,161 +1543,70 @@ function generateUniqueConclusions(question, count) {
             text,
             graph,
             topology,
-            isValid,
-            isBase
+            isValid
         );
 
         if (!candidate) return;
-        if (poolSemanticKeys.has(candidate.semantic.semanticKey)) return;
-        poolSemanticKeys.add(candidate.semantic.semanticKey);
+        if (semanticKeys.has(candidate.semantic.semanticKey)) return;
+        semanticKeys.add(candidate.semantic.semanticKey);
         candidatePool.push(candidate);
     };
 
-    const baseEntities = extractEntities(question.conclusion);
-    let baseCandidate = null;
-    if (baseEntities.length >= 2) {
-        baseCandidate = createConclusionCandidate(
-            baseEntities[0],
-            baseEntities[1],
-            question.conclusion,
-            question.conclusion,
-            graph,
-            topology,
-            question.isValid,
-            true
-        );
-    }
+    for (let i = 0; i < entities.length; i++) {
+        for (let j = i + 1; j < entities.length; j++) {
+            const eA = entities[i];
+            const eB = entities[j];
 
-    if (entities.length >= 2) {
-        for (let i = 0; i < entities.length; i++) {
-            for (let j = 0; j < entities.length; j++) {
-                if (i === j) continue;
-
-                const eA = entities[i];
-                const eB = entities[j];
-
-                for (const relation of relationsList) {
-                    const text = `${formatEntity(eA)} ${relation} ${formatEntity(eB)}`;
-                    const valid = graph.evaluateRelation(eA, eB, relation);
-                    if (valid === null) continue;
-                    addCandidate(eA, eB, relation, text, valid, false);
-                }
+            for (const relation of relationsList) {
+                const text = `${formatEntity(eA)} ${relation} ${formatEntity(eB)}`;
+                const valid = graph.evaluateRelation(eA, eB, relation);
+                if (valid === null) continue;
+                addCandidate(eA, eB, relation, text, valid);
             }
         }
     }
 
-    const selected = [];
-    const selectedSemanticKeys = new Set();
-    const selectedPairKeys = new Set();
-    const coveredEdges = new Set();
-    const coveredEntities = new Set();
-    const usedBands = new Map();
+    const pairGroups = buildPairGroups(candidatePool);
+    if (!pairGroups.length) return [{ text: question.conclusion, isValid: question.isValid }];
+
+    const uniquePairCount = pairGroups.length;
+    const targetCount = Math.min(count, uniquePairCount);
+    const selectedGroups = chooseStructuralPairs(pairGroups, targetCount, isHarderEnabled, topology);
+    const truthTargets = Array.from({ length: selectedGroups.length }, () => randomUnit() < 0.5);
     const usedRelationKeys = new Map();
+    const conclusions = [];
 
-    const registerSelected = candidate => {
-        selected.push(candidate);
-        selectedSemanticKeys.add(candidate.semantic.semanticKey);
-        selectedPairKeys.add(candidate.semantic.pairKey);
-        for (const edge of candidate.pathEdges || []) coveredEdges.add(edge);
-        coveredEntities.add(normalizeSemanticEntity(candidate.eA));
-        coveredEntities.add(normalizeSemanticEntity(candidate.eB));
-        usedBands.set(candidate.band, (usedBands.get(candidate.band) || 0) + 1);
-        const relationKey = candidate.semantic.kind === "vector"
-            ? candidate.semantic.value.join(",")
-            : `${candidate.semantic.kind}:${candidate.semantic.value}`;
+    for (let i = 0; i < selectedGroups.length; i++) {
+        const candidate = chooseCandidateForTruth(
+            selectedGroups[i],
+            truthTargets[i],
+            isHarderEnabled,
+            usedRelationKeys
+        );
+
+        if (!candidate) continue;
+        const relationKey = candidateRelationKey(candidate);
         usedRelationKeys.set(relationKey, (usedRelationKeys.get(relationKey) || 0) + 1);
-    };
-
-    if (baseCandidate && !poolSemanticKeys.has(baseCandidate.semantic.semanticKey)) {
-        poolSemanticKeys.add(baseCandidate.semantic.semanticKey);
-        candidatePool.push(baseCandidate);
+        conclusions.push(presentCandidate(candidate, premiseTexts));
     }
 
-    if (!candidatePool.length) return [base];
+    if (conclusions.length < count) {
+        const usedSemantic = new Set(conclusions.map(c => relationSemanticInfo(c.text)?.semanticKey).filter(Boolean));
+        const remaining = shuffleArray(candidatePool.filter(c => !usedSemantic.has(c.semantic.semanticKey)));
 
-    const slots = count;
-    const truthTargets = Array.from({ length: slots }, () => Math.random() < 0.5);
-    const pathTargets = isHarderEnabled
-        ? makePathTargets(slots, null, candidatePool)
-        : Array.from({ length: slots }, () => null);
-
-    for (let slot = 0; slot < slots; slot++) {
-        let available = candidatePool.filter(c => !selectedSemanticKeys.has(c.semantic.semanticKey));
-        if (!available.length) break;
-
-        const targetTruth = truthTargets[slot];
-        const truthMatched = available.filter(c => c.isValid === targetTruth);
-        if (truthMatched.length) available = truthMatched;
-
-        const unusedPairCandidates = available.filter(c => !selectedPairKeys.has(c.semantic.pairKey));
-        if (unusedPairCandidates.length) available = unusedPairCandidates;
-
-        const targetBand = pathTargets[slot];
-        const exactBand = targetBand ? available.filter(c => c.band === targetBand) : [];
-        const bandPool = exactBand.length ? exactBand : available;
-
-        const scored = bandPool.map(candidate => {
-            let score = Math.random() * 18;
-            const newEdges = (candidate.pathEdges || []).filter(edge => !coveredEdges.has(edge)).length;
-            const newEntities = [candidate.eA, candidate.eB]
-                .map(normalizeSemanticEntity)
-                .filter(e => !coveredEntities.has(e)).length;
-            const relationKey = candidate.semantic.kind === "vector"
-                ? candidate.semantic.value.join(",")
-                : `${candidate.semantic.kind}:${candidate.semantic.value}`;
-            const relationUses = usedRelationKeys.get(relationKey) || 0;
-            const bandUses = usedBands.get(candidate.band) || 0;
-
-            if (isHarderEnabled) {
-                score += newEdges * 16;
-                score += newEntities * 7;
-                score -= relationUses * 6;
-                score -= bandUses * 2;
-
-                if (targetBand && candidate.band === targetBand) score += 34;
-                if (candidate.directlyStated && candidate.premiseEquivalent) score += 7;
-
-                if (!candidate.isValid && candidate.mismatchCount !== null) {
-                    if (candidate.mismatchCount === 1) score += 18;
-                    else if (candidate.mismatchCount === 2) score += 7;
-                    else score -= 4;
-                }
-
-                if (candidate.isValid && candidate.premiseEquivalent) score += 4;
-                if (candidate.pathLength >= 3 && targetBand !== "infer3") score -= 4;
-            } else {
-                score += newEdges * 4;
-                score += newEntities * 2;
-                score -= relationUses * 2;
-            }
-
-            return { candidate, score };
-        });
-
-        scored.sort((a, b) => b.score - a.score);
-        const top = scored.slice(0, Math.min(4, scored.length));
-        const chosenEntry = weightedPick(top, entry => Math.exp(entry.score / 18));
-        const chosen = chosenEntry ? chosenEntry.candidate : scored[0].candidate;
-        registerSelected(chosen);
-    }
-
-    if (selected.length < count) {
-        let remaining = candidatePool.filter(c => !selectedSemanticKeys.has(c.semantic.semanticKey));
-        shuffleArray(remaining);
         for (const candidate of remaining) {
-            if (selected.length >= count) break;
-            registerSelected(candidate);
+            if (conclusions.length >= count) break;
+            const pairAlreadyUsed = conclusions.some(c => relationSemanticInfo(c.text)?.pairKey === candidate.semantic.pairKey);
+            if (pairAlreadyUsed && conclusions.length < uniquePairCount) continue;
+            const presented = presentCandidate(candidate, premiseTexts);
+            const semantic = relationSemanticInfo(presented.text);
+            if (!semantic || usedSemantic.has(semantic.semanticKey)) continue;
+            usedSemantic.add(semantic.semanticKey);
+            conclusions.push(presented);
         }
     }
 
-    const result = selected.slice(0, count).map(c => ({
-        text: c.text,
-        isValid: c.isValid,
-        pathLength: c.pathLength,
-        direct: c.pathLength === 1
-    }));
-
-    return shuffleArray(result);
+    return shuffleArray(conclusions.slice(0, count));
 }
 
 function init() {
