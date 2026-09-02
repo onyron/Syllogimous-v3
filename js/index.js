@@ -608,8 +608,14 @@ const RELATION_INVERSES = {
     "is not equal to": "is not equal to",
     "is greater than": "is smaller than",
     "is smaller than": "is greater than",
+    "is more than": "is less than",
+    "is less than": "is more than",
     "is faster than": "is slower than",
     "is slower than": "is faster than",
+    "is before": "is after",
+    "is after": "is before",
+    "is later than": "is earlier than",
+    "is earlier than": "is later than",
     "is North of": "is South of",
     "is South of": "is North of",
     "is East of": "is West of",
@@ -684,7 +690,7 @@ function extractEntities(str) {
         "east", "west", "north-east", "south-east", "north-west", "south-west",
         "above", "below", "left", "right", "contains", "within", "at", "and",
         "or", "if", "then", "all", "no", "some", "are", "a", "an", "the",
-        "true", "false", "junk"
+        "true", "false", "junk", "has", "relation", "before", "after", "less", "more"
     ]);
 
     const candidates = [];
@@ -745,7 +751,10 @@ function relationToVector(text) {
     if (
         /\bright\b/.test(rel) ||
         /\bgreater\b/.test(rel) ||
+        /\bmore\b/.test(rel) ||
         /\bfaster\b/.test(rel) ||
+        /\bafter\b/.test(rel) ||
+        /\blater\b/.test(rel) ||
         /\bcontains\b/.test(rel)
     ) {
         x = 1;
@@ -754,7 +763,10 @@ function relationToVector(text) {
     if (
         /\bleft\b/.test(rel) ||
         /\bsmaller\b/.test(rel) ||
+        /\bless\b/.test(rel) ||
         /\bslower\b/.test(rel) ||
+        /\bbefore\b/.test(rel) ||
+        /\bearlier\b/.test(rel) ||
         /\bwithin\b/.test(rel)
     ) {
         x = -1;
@@ -1602,7 +1614,10 @@ function generateUniqueConclusions(question, count) {
     const relationGroups = [
         ["is same as", "is opposite of", "is equal to", "is not equal to"],
         ["is greater than", "is smaller than"],
+        ["is more than", "is less than"],
         ["is faster than", "is slower than"],
+        ["is before", "is after"],
+        ["is later than", "is earlier than"],
         ["contains", "is within"],
         ["is left of", "is right of"],
         [
