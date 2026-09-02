@@ -59,6 +59,10 @@ const spoilerArea = document.getElementById('spoiler-area');
 const confirmationButtons = document.querySelector(".confirmation-buttons");
 let imagePromise = Promise.resolve();
 
+keySettingMap["enable-harder-conclusions"] = "enableHarderConclusions";
+keySettingMap["enable-multiple-conclusions"] = "enableMultipleConclusions";
+keySettingMap["number-of-conclusions"] = "numberOfConclusions";
+
 const keySettingMapInverse = Object.entries(keySettingMap)
     .reduce((a, b) => (a[b[1]] = b[0], a), {});
 
@@ -877,6 +881,105 @@ function solveSpatialGraph(premises, baseConclusion, question) {
                     parity.set(e1, 1 - p2);
                     changed = true;
                 }
+            }
+        }
+    }
+
+    const rawOps = Array.isArray(question) ? question : (question?.operations || []);
+    if (rawOps.length > 0) {
+        for (const op of rawOps) {
+            let clean = op;
+            clean = clean.replace(/<svg[^>]*>[\s\S]*?#junk-(\d+)[\s\S]*?<\/svg>/gi, "[JUNK]$1[/JUNK]");
+            clean = clean.replace(/<svg[^>]*id=["']junk-(\d+)["'][^>]*>[\s\S]*?<\/svg>/gi, "[JUNK]$1[/JUNK]");
+            clean = clean.replace(/<svg[^>]*class=["'][^"']*junk[^"']*["'][^>]*>[\s\S]*?<\/svg>/gi, "[JUNK]$1[/JUNK]");
+            clean = clean.replace(/#junk-(\d+)/gi, "[JUNK]$1[/JUNK]");
+            clean = clean.replace(/\bjunk-(\d+)\b/gi, "[JUNK]$1[/JUNK]");
+            clean = clean.replace(/<[^>]*>/g, " ");
+            clean = clean.replace(/\s+/g, " ").trim();
+
+            const findEnt = (txt) => {
+                if (!txt) return null;
+                const sorted = [...entities].sort((a, b) => b.length - a.length);
+                const l = txt.toLowerCase();
+                for (const e of sorted) {
+                    if (txt.includes(e) || l.includes(e.toLowerCase())) return e;
+                }
+                return null;
+            };
+
+            const m1 = clean.match(/([xyz])\s+of\s+(.+?)\s+is\s+set\s+to\s+([xyz])\s+of\s+(.+)/i);
+            if (m1) {
+                const ax1 = m1[1].toLowerCase();
+                const ent1 = findEnt(m1[2]);
+                const ax2 = m1[3].toLowerCase();
+                const ent2 = findEnt(m1[4]);
+                if (ent1 && ent2) {
+                    const c1 = coords.get(ent1);
+                    const c2 = coords.get(ent2);
+                    if (c1 && c2 && typeof c2[ax2] === 'number') {
+                        c1[ax1] = c2[ax2];
+                    }
+                }
+                continue;
+            }
+
+            const m2 = clean.match(/([xyz])\s+of\s+(.+?)\s+is\s+set\s+to\s+(-?\d+(?:\.\d+)?)/i);
+            if (m2) {
+                const ax1 = m2[1].toLowerCase();
+                const ent1 = findEnt(m2[2]);
+                const val = parseFloat(m2[3]);
+                if (ent1) {
+                    const c1 = coords.get(ent1);
+                    if (c1 && !isNaN(val)) {
+                        c1[ax1] = val;
+                    }
+                }
+                continue;
+            }
+
+            const m3 = clean.match(/([xyz])\s+of\s+(.+?)\s+is\s+(increased|decreased|shifted)\s+by\s+(-?\d+(?:\.\d+)?)/i);
+            if (m3) {
+                const ax1 = m3[1].toLowerCase();
+                const ent1 = findEnt(m3[2]);
+                const dir = m3[3].toLowerCase();
+                const val = parseFloat(m3[4]);
+                const delta = dir === 'decreased' ? -val : val;
+                if (ent1) {
+                    const c1 = coords.get(ent1);
+                    if (c1 && !isNaN(delta) && typeof c1[ax1] === 'number') {
+                        c1[ax1] += delta;
+                    }
+                }
+                continue;
+            }
+
+            const m4 = clean.match(/swap\s+([xyz])\s+and\s+([xyz])\s+of\s+(.+)/i);
+            if (m4) {
+                const ax1 = m4[1].toLowerCase();
+                const ax2 = m4[2].toLowerCase();
+                const ent1 = findEnt(m4[3]);
+                if (ent1) {
+                    const c1 = coords.get(ent1);
+                    if (c1 && typeof c1[ax1] === 'number' && typeof c1[ax2] === 'number') {
+                        const tmp = c1[ax1];
+                        c1[ax1] = c1[ax2];
+                        c1[ax2] = tmp;
+                    }
+                }
+                continue;
+            }
+
+            const m5 = clean.match(/([xyz])\s+of\s+(.+?)\s+is\s+(?:inverted|negated)/i);
+            if (m5) {
+                const ax1 = m5[1].toLowerCase();
+                const ent1 = findEnt(m5[2]);
+                if (ent1) {
+                    const c1 = coords.get(ent1);
+                    if (c1 && typeof c1[ax1] === 'number') {
+                        c1[ax1] = -c1[ax1];
+                    }
+                }
+                continue;
             }
         }
     }
