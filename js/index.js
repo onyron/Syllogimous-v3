@@ -690,7 +690,8 @@ function extractEntities(str) {
         "east", "west", "north-east", "south-east", "north-west", "south-west",
         "above", "below", "left", "right", "contains", "within", "at", "and",
         "or", "if", "then", "all", "no", "some", "are", "a", "an", "the",
-        "true", "false", "junk", "has", "relation", "before", "after", "less", "more"
+        "true", "false", "junk", "has", "relation", "before", "after", "less", "more",
+        "different", "from", "later", "earlier"
     ]);
 
     const candidates = [];
