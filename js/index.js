@@ -1084,11 +1084,12 @@ function generateAnalogyConclusions(question, count) {
     const ents = extractEntities(baseRaw);
     if (ents.length >= 4) {
         const [A, B, C, D] = ents.map(formatEntity);
-        
+        const isDifferent = baseRaw.toLowerCase().includes("different");
+        const areSame = isDifferent ? !question.isValid : question.isValid;
         const symmetric = `${C} : ${D} :: ${A} : ${B}`;
-        conclusions.push({ text: symmetric, isValid: question.isValid });
+        conclusions.push({ text: symmetric, isValid: areSame });
         
-        if (question.isValid && conclusions.length < count) {
+        if (areSame && conclusions.length < count) {
             const invalid = `${A} : ${B} :: ${D} : ${C}`;
             conclusions.push({ text: invalid, isValid: false });
         }
