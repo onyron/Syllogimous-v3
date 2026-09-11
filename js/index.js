@@ -83,7 +83,6 @@ function registerEventHandlers() {
                 savedata[value] = !!input.checked;
                 refresh();
             };
-            input.addEventListener("input", handleCheck);
             input.addEventListener("change", handleCheck);
         }
 
@@ -563,9 +562,9 @@ function generateQuestion() {
      && binaryEnable
     ) {
         if ((savedata.maxNestedBinaryDepth ?? 1) <= 1)
-            generators.push(createBinaryGenerator(quota));
+            generators.push(createBinaryGenerator(binaryQuota));
         else
-            generators.push(createNestedBinaryGenerator(quota));
+            generators.push(createNestedBinaryGenerator(binaryQuota));
     }
 
     if (savedata.enableAnalogy && !analogyEnable) {
@@ -796,36 +795,27 @@ function solveSpatialGraph(premises, baseConclusion, question) {
 
     const coords = new Map();
     const parity = new Map();
+    const comp = new Map();
+    let nextComp = 1;
+
+    function getComp(e) {
+        if (!comp.has(e)) comp.set(e, nextComp++);
+        return comp.get(e);
+    }
+
+    function mergeComp(e1, e2) {
+        const c1 = getComp(e1);
+        const c2 = getComp(e2);
+        if (c1 !== c2) {
+            for (const [k, v] of comp.entries()) {
+                if (v === c2) comp.set(k, c1);
+            }
+        }
+    }
 
     for (const entity of entities) {
         coords.set(entity, null);
         parity.set(entity, undefined);
-    }
-
-    for (const premise of rawPremises) {
-        const premiseEntities = extractEntities(premise);
-
-        if (premiseEntities.length >= 2 && relationToVector(premise)) {
-            coords.set(premiseEntities[0], { x: 0, y: 0, z: 0 });
-            break;
-        }
-    }
-
-    for (const premise of rawPremises) {
-        const premiseEntities = extractEntities(premise);
-        if (premiseEntities.length < 2) continue;
-
-        const lower = stripHtml(premise).toLowerCase();
-
-        if (
-            lower.includes("is same as") ||
-            lower.includes("is equal to") ||
-            lower.includes("is opposite") ||
-            lower.includes("is not equal to")
-        ) {
-            parity.set(premiseEntities[0], 0);
-            break;
-        }
     }
 
     let changed = true;
@@ -846,8 +836,14 @@ function solveSpatialGraph(premises, baseConclusion, question) {
             const vector = relationToVector(premiseClean);
 
             if (vector) {
-                const c1 = coords.get(e1);
-                const c2 = coords.get(e2);
+                let c1 = coords.get(e1);
+                let c2 = coords.get(e2);
+
+                if (!c1 && !c2) {
+                    coords.set(e1, { x: 0, y: 0, z: 0 });
+                    c1 = coords.get(e1);
+                    changed = true;
+                }
 
                 if (c1 && !c2) {
                     coords.set(e2, {
@@ -864,14 +860,22 @@ function solveSpatialGraph(premises, baseConclusion, question) {
                     });
                     changed = true;
                 }
+
+                mergeComp(e1, e2);
             }
 
             if (
                 lower.includes("is same as") ||
                 lower.includes("is equal to")
             ) {
-                const p1 = parity.get(e1);
-                const p2 = parity.get(e2);
+                let p1 = parity.get(e1);
+                let p2 = parity.get(e2);
+
+                if (p1 === undefined && p2 === undefined) {
+                    parity.set(e1, 0);
+                    p1 = 0;
+                    changed = true;
+                }
 
                 if (p1 !== undefined && p2 === undefined) {
                     parity.set(e2, p1);
@@ -880,12 +884,20 @@ function solveSpatialGraph(premises, baseConclusion, question) {
                     parity.set(e1, p2);
                     changed = true;
                 }
+
+                mergeComp(e1, e2);
             } else if (
                 lower.includes("is opposite") ||
                 lower.includes("is not equal to")
             ) {
-                const p1 = parity.get(e1);
-                const p2 = parity.get(e2);
+                let p1 = parity.get(e1);
+                let p2 = parity.get(e2);
+
+                if (p1 === undefined && p2 === undefined) {
+                    parity.set(e1, 0);
+                    p1 = 0;
+                    changed = true;
+                }
 
                 if (p1 !== undefined && p2 === undefined) {
                     parity.set(e2, 1 - p1);
@@ -894,6 +906,8 @@ function solveSpatialGraph(premises, baseConclusion, question) {
                     parity.set(e1, 1 - p2);
                     changed = true;
                 }
+
+                mergeComp(e1, e2);
             }
         }
     }
@@ -1000,7 +1014,11 @@ function solveSpatialGraph(premises, baseConclusion, question) {
     return {
         entities,
         coords,
+        parity,
+        comp,
         evaluateRelation: (e1, e2, relation) => {
+            if (comp.get(e1) !== comp.get(e2)) return null;
+
             const vector = relationToVector(relation);
 
             if (vector) {
@@ -1046,34 +1064,41 @@ function solveSpatialGraph(premises, baseConclusion, question) {
 }
 
 function generateSyllogismConclusions(question, count) {
-    const baseRaw = question.conclusion;
-    const conclusions = [{ text: baseRaw, isValid: question.isValid }];
-    if (count <= 1) return conclusions;
+    return [{ text: question.conclusion, isValid: question.isValid }];
+}
 
-    const cleanText = stripHtml(baseRaw).trim();
-    const ents = extractEntities(baseRaw);
-    
-    if (ents.length >= 2) {
-        const S = formatEntity(ents[0]);
-        const P = formatEntity(ents[ents.length - 1]);
-        
-        let contradictoryText = "";
-        if (cleanText.startsWith("All ") && cleanText.includes(" are ")) {
-            contradictoryText = `Some ${S} are not ${P}`;
-        } else if (cleanText.startsWith("No ") && cleanText.includes(" are ")) {
-            contradictoryText = `Some ${S} are ${P}`;
-        } else if (cleanText.startsWith("Some ") && cleanText.includes(" are not ")) {
-            contradictoryText = `All ${S} are ${P}`;
-        } else if (cleanText.startsWith("Some ") && cleanText.includes(" are ")) {
-            contradictoryText = `No ${S} are ${P}`;
-        }
-
-        if (contradictoryText) {
-            conclusions.push({ text: contradictoryText, isValid: !question.isValid });
-        }
+function evaluateAnalogy(graph, e1, e2, e3, e4) {
+    if (graph.comp && (graph.comp.get(e1) !== graph.comp.get(e2) || graph.comp.get(e3) !== graph.comp.get(e4))) {
+        return null;
     }
 
-    return conclusions;
+    if (graph.coords && graph.coords.get(e1) && graph.coords.get(e2) && graph.coords.get(e3) && graph.coords.get(e4)) {
+        const c1 = graph.coords.get(e1);
+        const c2 = graph.coords.get(e2);
+        const c3 = graph.coords.get(e3);
+        const c4 = graph.coords.get(e4);
+        
+        const dx1 = Math.sign(c1.x - c2.x);
+        const dy1 = Math.sign(c1.y - c2.y);
+        const dz1 = Math.sign(c1.z - c2.z);
+        
+        const dx2 = Math.sign(c3.x - c4.x);
+        const dy2 = Math.sign(c3.y - c4.y);
+        const dz2 = Math.sign(c3.z - c4.z);
+        
+        return dx1 === dx2 && dy1 === dy2 && dz1 === dz2;
+    }
+    
+    if (graph.parity && graph.parity.get(e1) !== undefined && graph.parity.get(e2) !== undefined && graph.parity.get(e3) !== undefined && graph.parity.get(e4) !== undefined) {
+        const p1 = graph.parity.get(e1);
+        const p2 = graph.parity.get(e2);
+        const p3 = graph.parity.get(e3);
+        const p4 = graph.parity.get(e4);
+        
+        return (p1 === p2) === (p3 === p4);
+    }
+    
+    return null;
 }
 
 function generateAnalogyConclusions(question, count) {
@@ -1082,40 +1107,94 @@ function generateAnalogyConclusions(question, count) {
     if (count <= 1) return conclusions;
 
     const ents = extractEntities(baseRaw);
-    if (ents.length >= 4) {
-        const [A, B, C, D] = ents.map(formatEntity);
-        const isDifferent = baseRaw.toLowerCase().includes("different");
-        const areSame = isDifferent ? !question.isValid : question.isValid;
-        const symmetric = `${C} : ${D} :: ${A} : ${B}`;
-        conclusions.push({ text: symmetric, isValid: areSame });
-        
-        if (areSame && conclusions.length < count) {
-            const invalid = `${A} : ${B} :: ${D} : ${C}`;
-            conclusions.push({ text: invalid, isValid: false });
+    if (ents.length < 4) return conclusions;
+
+    const [A, B, C, D] = ents.map(formatEntity);
+    const isDifferent = baseRaw.toLowerCase().includes("different");
+
+    const makeText = (e1, e2, e3, e4) => {
+        if (isDifferent) return `${e1} : ${e2} is different from ${e3} : ${e4}`;
+        return `${e1} : ${e2} :: ${e3} : ${e4}`;
+    };
+
+    const graph = solveSpatialGraph(question.premises, question.conclusion, question);
+    if (!graph) return conclusions;
+
+    const candidatesPool = [];
+    const entities4 = [A, B, C, D];
+    
+    for (let i = 0; i < 4; i++) {
+        for (let j = 0; j < 4; j++) {
+            if (i === j) continue;
+            for (let k = 0; k < 4; k++) {
+                if (k === i || k === j) continue;
+                for (let l = 0; l < 4; l++) {
+                    if (l === i || l === j || l === k) continue;
+                    
+                    const e1 = entities4[i];
+                    const e2 = entities4[j];
+                    const e3 = entities4[k];
+                    const e4 = entities4[l];
+                    
+                    const isAnalogous = evaluateAnalogy(graph, stripHtml(e1), stripHtml(e2), stripHtml(e3), stripHtml(e4));
+                    if (isAnalogous === null) continue;
+
+                    const isValid = isDifferent ? !isAnalogous : isAnalogous;
+                    const text = makeText(e1, e2, e3, e4);
+                    candidatesPool.push({ text, isValid });
+                }
+            }
         }
     }
 
-    return conclusions;
+    if (candidatesPool.length === 0) return conclusions;
+
+    const truePool = candidatesPool.filter(c => c.isValid && c.text !== baseRaw);
+    const falsePool = candidatesPool.filter(c => !c.isValid && c.text !== baseRaw);
+    
+    const uniquePool = (pool) => {
+        const seen = new Set();
+        return pool.filter(c => {
+            if (seen.has(c.text)) return false;
+            seen.add(c.text);
+            return true;
+        });
+    };
+    
+    const uTrue = uniquePool(truePool);
+    const uFalse = uniquePool(falsePool);
+    
+    shuffleArray(uTrue);
+    shuffleArray(uFalse);
+    
+    const seen = new Set([baseRaw]);
+    let needed = count - 1;
+    let tIdx = 0;
+    let fIdx = 0;
+    
+    while (needed > 0 && (tIdx < uTrue.length || fIdx < uFalse.length)) {
+        let pickTrue = false;
+        if (tIdx < uTrue.length && fIdx < uFalse.length) {
+            pickTrue = randomUnit() < 0.5;
+        } else if (tIdx < uTrue.length) {
+            pickTrue = true;
+        } else {
+            pickTrue = false;
+        }
+        
+        const cand = pickTrue ? uTrue[tIdx++] : uFalse[fIdx++];
+        if (!seen.has(cand.text)) {
+            seen.add(cand.text);
+            conclusions.push(cand);
+            needed--;
+        }
+    }
+
+    return shuffleArray(conclusions);
 }
 
 function generateBinaryConclusions(question, count) {
-    const baseRaw = question.conclusion;
-    const conclusions = [{ text: baseRaw, isValid: question.isValid }];
-    if (count <= 1) return conclusions;
-
-    if (baseRaw.includes(" AND ")) {
-        const parts = baseRaw.split(" AND ");
-        if (parts.length === 2) {
-            conclusions.push({ text: `${parts[1].trim()} AND ${parts[0].trim()}`, isValid: question.isValid });
-        }
-    } else if (baseRaw.includes(" OR ")) {
-        const parts = baseRaw.split(" OR ");
-        if (parts.length === 2) {
-            conclusions.push({ text: `${parts[1].trim()} OR ${parts[0].trim()}`, isValid: question.isValid });
-        }
-    }
-
-    return conclusions;
+    return [{ text: question.conclusion, isValid: question.isValid }];
 }
 
 function normalizeSemanticEntity(entity) {
