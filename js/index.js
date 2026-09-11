@@ -1008,6 +1008,39 @@ function solveSpatialGraph(premises, baseConclusion, question) {
                 }
                 continue;
             }
+
+            const m6 = clean.match(/(.+?)\s+is\s+([xyz])[- ]mirrored\s+across\s+(.+)/i);
+            if (m6) {
+                const ent1 = findEnt(m6[1]);
+                const ax = m6[2].toLowerCase();
+                const ent2 = findEnt(m6[3]);
+                if (ent1 && ent2) {
+                    const c1 = coords.get(ent1);
+                    const c2 = coords.get(ent2);
+                    if (c1 && c2 && typeof c1[ax] === 'number' && typeof c2[ax] === 'number') {
+                        c1[ax] = 2 * c2[ax] - c1[ax];
+                    }
+                }
+                continue;
+            }
+
+            const m7 = clean.match(/(.+?)\s+is\s+mirrored\s+across\s+(.+)/i);
+            if (m7) {
+                const ent1 = findEnt(m7[1]);
+                const ent2 = findEnt(m7[2]);
+                if (ent1 && ent2) {
+                    const c1 = coords.get(ent1);
+                    const c2 = coords.get(ent2);
+                    if (c1 && c2) {
+                        for (const ax of ['x', 'y', 'z']) {
+                            if (typeof c1[ax] === 'number' && typeof c2[ax] === 'number') {
+                                c1[ax] = 2 * c2[ax] - c1[ax];
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
         }
     }
 
