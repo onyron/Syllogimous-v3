@@ -104,6 +104,9 @@ let savedata = {
     "autoProgressionChange": 'auto',
     "autoProgressionTimeDrop": 5,
     "autoProgressionTimeBump": 5,
+    "enableMultipleConclusions": false,
+    "enableHarderConclusions": false,
+    "numberOfConclusions": 3,
 };
 
 const defaultSavedata = structuredClone(savedata);
