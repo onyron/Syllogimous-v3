@@ -2107,3 +2107,338 @@ table.distinction {
         padding-right: 0.125em;
     }
 }
+
+
+/* ============================================================
+   UNCERTAINTY RRT & MODAL REASONING STYLES
+   ============================================================ */
+.confirmation-could {
+    background-color: #286c93 !important;
+}
+
+.confirmation-could:hover {
+    box-shadow: 0 3px 5px 0 #1688 !important;
+}
+
+.confirmation-buttons button[hidden] {
+    display: none !important;
+}
+
+.uncertainty-mode .confirmation-buttons {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+    width: min(100%, 42rem);
+    margin: 0.75rem auto;
+}
+
+.uncertainty-mode .confirmation-buttons button {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    min-height: 3.25rem;
+    padding: 0.65rem 0.35rem;
+    font-size: clamp(0.8rem, 0.6rem + 1vw, 1.15rem);
+    line-height: 1.3;
+    white-space: normal;
+    overflow-wrap: normal;
+}
+
+.uncertainty-mode .display-inner h2 {
+    font-size: clamp(0.7rem, 1.5vw, 1rem);
+    letter-spacing: 0.04em;
+}
+
+.game-area.uncertainty-mode {
+    width: min(750px, calc(100vw - 6rem));
+    min-width: 0;
+}
+
+.uncertainty-mode .carousel,
+.uncertainty-mode .display-outer {
+    width: 100%;
+    min-width: 0;
+}
+
+.uncertainty-mode .carousel_display_text {
+    max-height: max(7rem, calc(100svh - 21rem));
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+    overscroll-behavior: contain;
+}
+
+.uncertainty-settings {
+    padding: 0.8rem;
+    border: 1px solid var(--switch-border-color);
+    border-left: 3px solid var(--bracket-color);
+    border-radius: 3px;
+}
+
+.advanced-rrt-settings {
+    padding: 0.8rem;
+    border: 1px solid var(--switch-border-color);
+    border-left: 3px solid #7c3aed;
+    border-radius: 3px;
+    margin-bottom: 0.8rem;
+}
+
+.advanced-rrt-settings fieldset {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+}
+
+#advanced-rrt-options {
+    padding-left: 0.6rem;
+}
+
+.advanced-rrt-settings > fieldset:disabled {
+    opacity: 0.5;
+}
+
+.uncertainty-settings fieldset {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+}
+
+.uncertainty-settings fieldset[hidden] {
+    display: none;
+}
+
+#uncertainty-options {
+    padding-left: 0.6rem;
+}
+
+.uncertainty-settings > fieldset:disabled {
+    opacity: 0.5;
+}
+
+.uncertainty-variant-toggle {
+    margin-top: 0.8rem;
+}
+
+.uncertainty-setting-help {
+    margin: 0.55rem 0;
+    font-size: var(--step--2);
+    line-height: 1.5;
+}
+
+.uncertainty-setting-help:last-child {
+    margin-bottom: 0;
+}
+
+.uncertainty-instructions {
+    max-width: 52rem;
+    margin: 0 auto 1rem;
+    padding: 0.65rem 0.85rem;
+    border-left: 3px solid var(--bracket-color);
+    background: var(--multi-input-bg);
+    font-family: "Roboto", sans-serif;
+    font-size: var(--step--2);
+    line-height: 1.5;
+    letter-spacing: normal;
+}
+
+.uncertainty-instructions p + p,
+.uncertainty-info p {
+    margin-top: 0.7rem;
+}
+
+.uncertainty-rules {
+    padding: 0;
+    margin-bottom: 0.65rem;
+    text-align: left;
+}
+
+.uncertainty-rules summary {
+    min-height: 44px;
+    padding: 0.65rem 0.75rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.uncertainty-rules summary:focus-visible {
+    outline: 2px solid var(--bracket-color);
+    outline-offset: -2px;
+}
+
+.uncertainty-rules-context {
+    margin-left: 0.75rem;
+    color: var(--preamble-color);
+    font-size: 0.8rem;
+}
+
+.uncertainty-rules-content {
+    max-height: 32svh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 0.75rem 0.75rem;
+    font-size: 0.9rem;
+    line-height: 1.55;
+}
+
+.uncertainty-info {
+    font-size: var(--step--2);
+    line-height: 1.5;
+}
+
+dialog.uncertainty-explanation {
+    width: min(94vw, 72rem);
+    max-width: 94vw;
+    max-height: 92vh;
+    max-height: 92svh;
+    margin: auto;
+    padding: 0;
+    overflow: auto;
+    border: 1px solid var(--bracket-color);
+    border-radius: 6px;
+    background: var(--background-color);
+    color: var(--text-color);
+    box-shadow: 0 1rem 4rem #0008;
+    font-family: "Roboto", sans-serif;
+    font-size: var(--step--1);
+    line-height: 1.5;
+}
+
+dialog.uncertainty-explanation::backdrop {
+    background: #000b;
+}
+
+.uncertainty-explanation-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 1rem;
+    border-bottom: 1px solid var(--switch-border-color);
+    background: var(--background-color);
+}
+
+.uncertainty-explanation-header h2 {
+    font-size: var(--step-0);
+}
+
+.uncertainty-explanation-close {
+    flex-shrink: 0;
+    min-width: 3rem;
+    min-height: 2.75rem;
+    font-size: var(--step--1);
+}
+
+.uncertainty-explanation-content {
+    padding: 1rem;
+}
+
+.uncertainty-explanation-summary {
+    margin-bottom: 1rem;
+}
+
+.uncertainty-explanation-summary p + p {
+    margin-top: 0.4rem;
+}
+
+.uncertainty-layouts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+    gap: 1rem;
+}
+
+.uncertainty-layout {
+    min-width: 0;
+    padding: 0.75rem;
+    border: 1px solid var(--switch-border-color);
+    border-radius: 3px;
+    background: var(--multi-input-bg);
+}
+
+.uncertainty-layout h3 {
+    margin-bottom: 0.35rem;
+    font-size: var(--step--1);
+}
+
+.uncertainty-layout-grid {
+    overflow: auto;
+    margin-top: 0.6rem;
+}
+
+.uncertainty-layout .table {
+    min-width: max-content;
+    font-size: var(--step--2);
+}
+
+.infinite-example-note {
+    margin-top: 1rem;
+    font-size: var(--step--2);
+}
+
+@media (max-width: 480px) {
+    .game-area.uncertainty-mode {
+        width: calc(100vw - 3.75rem);
+        box-sizing: border-box;
+    }
+
+    .uncertainty-mode .carousel_display_label-wrapper {
+        margin: 0;
+        padding: 1.1rem 0.25rem 0.5rem;
+    }
+
+    .uncertainty-mode .carousel_display_label-wrapper h2 {
+        font-size: 0.9rem;
+        letter-spacing: 0.04em;
+        padding: 0 0.25rem;
+    }
+
+    .uncertainty-mode .carousel_display_text {
+        font-size: 1.15rem;
+    }
+
+    .uncertainty-mode .carousel_display_label-wrapper > div:not(.carousel_display_text) {
+        display: none;
+    }
+
+    .uncertainty-mode .display_text {
+        min-width: 0;
+        max-height: max(8rem, calc(100svh - 18rem));
+        font-size: 1.05rem;
+        overflow-wrap: anywhere;
+        letter-spacing: 0.025em;
+    }
+
+    .uncertainty-mode .confirmation-buttons {
+        gap: 0.35rem;
+        margin: 0.65rem 0;
+    }
+
+    .uncertainty-mode .confirmation-buttons button {
+        min-height: 4rem;
+        padding: 0.5rem 0.2rem;
+        font-size: 0.8rem;
+        letter-spacing: normal;
+        touch-action: manipulation;
+    }
+}
+
+@media (max-height: 450px) and (max-width: 768px) {
+    .uncertainty-mode .timer-wrap {
+        margin-bottom: 2rem;
+    }
+
+    .uncertainty-mode .carousel_display_label-wrapper {
+        padding: 1rem 0.5rem 0.5rem;
+    }
+
+    .uncertainty-mode .confirmation-buttons {
+        margin: 0.35rem auto;
+    }
+
+    .uncertainty-mode .level-wrapper {
+        padding-bottom: 6px;
+    }
+}

@@ -67,9 +67,132 @@
 							<div class="inline-input__outer big-input">
 								Global Premises
 								<span class="inline-input__inner">
-									<input id="p-5" type="number" min="1" max="100" value="2" style="width: 5ch">qty
+									<input id="p-5" type="number" min="1" max="100" value="3" style="width: 5ch">qty
 								</span>
 							</div>
+						</div>
+						<div class="mb-2 uncertainty-settings">
+							<div class="ctrl__inner">
+								<div>
+									<input hidden id="p-70" type="checkbox">
+									<label class="switch" for="p-70"></label>
+								</div>
+								<label for="p-70">Enable Uncertainty RRT</label>
+							</div>
+							<fieldset id="uncertainty-options" aria-label="Uncertainty RRT options">
+								<div class="ctrl__inner uncertainty-variant-toggle">
+									<div>
+										<input hidden id="p-74" type="checkbox">
+										<label class="switch" for="p-74"></label>
+									</div>
+									<label for="p-74">Infinite mode</label>
+								</div>
+								<p class="uncertainty-setting-help">Choose one Uncertainty variant: leave Infinite mode off for finite layouts, or turn it on for unlimited distances and layouts.</p>
+								<div class="inline-input__outer">
+									<label for="p-76">Conclusions per question</label>
+									<span class="inline-input__inner"><input id="p-76" type="number" min="1" max="5" step="1" value="1" aria-describedby="uncertainty-conclusions-help" style="width: 5ch"></span>
+								</div>
+								<p id="uncertainty-conclusions-help" class="uncertainty-setting-help">Use 1–5 conclusions with the same premises in either variant. Answer each conclusion separately, one at a time. The timer restarts for each conclusion.</p>
+								<fieldset id="uncertainty-finite-options" aria-label="Finite mode options">
+									<p class="uncertainty-setting-help">Finite mode: each premise links neighboring grid squares. ALWAYS holds in all layouts, SOMETIMES in some but not all, and NEVER in none.</p>
+									<div class="inline-input__outer">Spatial layout possibilities (finite mode)</div>
+									<div class="multi-input">
+										<span class="single-input">
+											<label for="p-71">Min layouts</label>
+											<span class="inline-premise-spinner"><input id="p-71" type="number" min="2" max="8" step="1" value="2" aria-describedby="uncertainty-range-help" style="width: 5ch"></span>
+										</span>
+										<span class="single-input">
+											<label for="p-72">Max layouts</label>
+											<span class="inline-premise-spinner"><input id="p-72" type="number" min="2" max="8" step="1" value="4" aria-describedby="uncertainty-range-help" style="width: 5ch"></span>
+										</span>
+									</div>
+									<p id="uncertainty-range-help" class="uncertainty-setting-help">Finite Uncertainty questions have a number of possible layouts within this inclusive range (2–8). This range does not apply to Infinite mode. Raising min above max raises max; lowering max below min lowers min.</p>
+									<div class="multi-input">
+										<span class="single-input">
+											<label for="p-70-premises">Premises</label>
+											<span class="inline-premise-spinner"><input id="p-70-premises" type="number" min="3" max="50" step="1" placeholder="" value="" aria-describedby="uncertainty-premises-help" style="width: 5ch">ps</span>
+										</span>
+										<span class="single-input">
+											<label for="p-70-time">Time</label>
+											<span class="inline-premise-spinner"><input id="p-70-time" type="number" min="1" max="600" placeholder="" value="" style="width: 5ch">sec</span>
+										</span>
+										<span class="single-input">
+											<label for="p-73">Priority</label>
+											<span class="inline-premise-spinner"><input id="p-73" type="number" min="1" max="9999" value="100" style="width: 6ch">%</span>
+										</span>
+									</div>
+									<p id="uncertainty-premises-help" class="uncertainty-setting-help">Leave premises and time blank to use global settings. This mode uses 3–50 premises.</p>
+								</fieldset>
+								<fieldset id="uncertainty-infinite-options" aria-label="Infinite mode options" hidden>
+									<p class="uncertainty-setting-help">Unlimited distances and layouts. ALWAYS North means directly North at any distance. NEVER South excludes the entire southern half-plane, including South-West and South-East, at every distance. SOMETIMES means the exact compass relation holds in some but not all allowed layouts.</p>
+									<div class="multi-input">
+										<span class="single-input">
+											<label for="p-74-premises">Premises</label>
+											<span class="inline-premise-spinner"><input id="p-74-premises" type="number" min="3" max="20" step="1" placeholder="" value="" aria-describedby="infinite-premises-help" style="width: 5ch">ps</span>
+										</span>
+										<span class="single-input">
+											<label for="p-74-time">Time</label>
+											<span class="inline-premise-spinner"><input id="p-74-time" type="number" min="1" max="600" placeholder="" value="" style="width: 5ch">sec</span>
+										</span>
+										<span class="single-input">
+											<label for="p-75">Priority</label>
+											<span class="inline-premise-spinner"><input id="p-75" type="number" min="1" max="9999" value="100" style="width: 6ch">%</span>
+										</span>
+									</div>
+									<p id="infinite-premises-help" class="uncertainty-setting-help">Leave premises and time blank to use global settings. Infinite mode uses 3–20 premises.</p>
+								</fieldset>
+						</div>
+						<div class="mb-2 advanced-rrt-settings">
+							<div class="ctrl__inner">
+								<div>
+									<input hidden id="p-80" type="checkbox" checked>
+									<label class="switch" for="p-80"></label>
+								</div>
+								<label for="p-80">Enable Advanced RRT (7D / Analogy)</label>
+							</div>
+							<fieldset id="advanced-rrt-options" aria-label="Advanced RRT options">
+								<p class="uncertainty-setting-help">Unified multi-dimensional engine: 7D metric spaces, second-order vector analogies (A:B :: C:D), and modal superposition.</p>
+								<div class="inline-input__outer">
+									<label for="p-80-mode">Dimension Mode</label>
+									<span class="inline-input__inner">
+										<select id="p-80-mode" style="width: auto; background: var(--bg-color, #1a1a24); color: inherit; border-radius: 4px; padding: 2px 4px;">
+											<option value="spatial">2D Spatial (N/S/E/W)</option>
+											<option value="spatial_vertical">3D Space + Vertical (Above/Below)</option>
+											<option value="spatial_temporal" selected>3D Space + Time (After/Before)</option>
+											<option value="spatial_temporal_vertical">4D Space + Vertical + Time</option>
+											<option value="full_7d">Full 7D (Space, Time, Scale, Hierarchy)</option>
+										</select>
+									</span>
+								</div>
+								<div class="ctrl__inner" style="margin-top: 6px;">
+									<div>
+										<input hidden id="p-80-analogy" type="checkbox" checked>
+										<label class="switch" for="p-80-analogy"></label>
+									</div>
+									<label for="p-80-analogy">Vector Analogies (A:B :: C:D)</label>
+								</div>
+								<div class="ctrl__inner" style="margin-top: 6px;">
+									<div>
+										<input hidden id="p-80-modal" type="checkbox">
+										<label class="switch" for="p-80-modal"></label>
+									</div>
+									<label for="p-80-modal">Modal Uncertainty (MUST/COULD/CANNOT)</label>
+								</div>
+								<div class="multi-input" style="margin-top: 8px;">
+									<span class="single-input">
+										<label for="p-80-premises">Premises</label>
+										<span class="inline-premise-spinner"><input id="p-80-premises" type="number" min="2" max="50" step="1" placeholder="" value="" style="width: 5ch">ps</span>
+									</span>
+									<span class="single-input">
+										<label for="p-80-time">Time</label>
+										<span class="inline-premise-spinner"><input id="p-80-time" type="number" min="1" max="600" placeholder="" value="" style="width: 5ch">sec</span>
+									</span>
+									<span class="single-input">
+										<label for="p-80-weight">Priority</label>
+										<span class="inline-premise-spinner"><input id="p-80-weight" type="number" min="1" max="9999" value="100" style="width: 6ch">%</span>
+									</span>
+								</div>
+							</fieldset>
 						</div>
 						<div class="mb-1">
 							<div class="ctrl__inner">
@@ -332,7 +455,7 @@
 						<div class="mb-1">
 							<div class="ctrl__inner">
 								<div>
-									<input hidden id="p-1" type="checkbox" checked>
+									<input hidden id="p-1" type="checkbox">
 									<label class="switch" for="p-1"></label>
 								</div>
 								<label for="p-1">Enable Distinction</label>
@@ -359,7 +482,7 @@
 						<div class="mb-1">
 							<div class="ctrl__inner">
 								<div>
-									<input hidden id="p-2" type="checkbox" checked>
+									<input hidden id="p-2" type="checkbox">
 									<label class="switch" for="p-2"></label>
 								</div>
 								<label for="p-2">Enable Linear</label>
@@ -443,7 +566,7 @@
 						<div class="mb-1">
 							<div class="ctrl__inner">
 								<div>
-									<input hidden id="p-6" type="checkbox" checked>
+									<input hidden id="p-6" type="checkbox">
 									<label class="switch" for="p-6"></label>
 								</div>
 								<label for="p-6">Enable Space 2D</label>
@@ -1052,6 +1175,7 @@
 
 				<div class="confirmation-buttons" style="opacity: 0; pointer-events: none;">
 					<button id="true-button" class="confirmation-true" onclick="checkIfTrue()" tabindex="-1">TRUE</button>
+					<button id="could-button" class="confirmation-could" onclick="checkIfCould()" tabindex="-1" hidden>COULD OR COULD NOT BE</button>
 					<button id="false-button" class="confirmation-false" onclick="checkIfFalse()" tabindex="-1">FALSE</button>
 				</div>
 
@@ -2137,6 +2261,9 @@
 		<script src="js/generators/direction-pair-chooser.js"></script>
 		<script src="js/generators/incorrect-directions.js"></script>
 		<script src="js/generators/direction.js"></script>
+		<script src="js/generators/uncertainty.js"></script>
+		<script src="js/generators/infinite.js"></script>
+		<script src="js/generators/advanced-rrt.js"></script>
 		<script src="js/generators/meta.js"></script>
 		<script src="js/generators/distinction.js"></script>
 		<script src="js/generators/linear.js"></script>

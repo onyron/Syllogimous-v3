@@ -9,6 +9,61 @@ const feedbackMissed = document.querySelector(".feedback--missed");
 const feedbackRight = document.querySelector(".feedback--right");
 const trueButton = document.getElementById("true-button");
 const falseButton = document.getElementById("false-button");
+const couldButton = document.getElementById("could-button");
+
+const uncertaintyAnswerLabels = {
+    must: 'MUST BE',
+    could: 'COULD OR COULD NOT BE',
+    cannot: 'COULD NOT BE',
+};
+
+function isModalQuestion(q = question) {
+    return q?.type === 'uncertainty' || q?.type === 'infinite' || q?.type === 'advanced-rrt-modal';
+}
+
+function modalInstructions(q) {
+    if (q.type === 'uncertainty') return UNCERTAINTY_INSTRUCTIONS;
+    if (q.type === 'infinite') return INFINITE_INSTRUCTIONS;
+    if (q.type === 'advanced-rrt-modal') return typeof ADVANCED_RRT_MODAL_INSTRUCTIONS !== 'undefined' ? ADVANCED_RRT_MODAL_INSTRUCTIONS : q.instructions;
+    return q.instructions;
+}
+
+function modalLayoutDescription(q) {
+    if (q.type === 'infinite') return 'Unbounded spatial layouts.';
+    if (q.type === 'advanced-rrt-modal') return `${q.layoutCount} multi-dimensional layouts.`;
+    return `${q.layoutCount} possible layouts.`;
+}
+
+function modalRulesHTML(q) {
+    const description = q.type === 'infinite' ? 'Infinite mode' : `${q.layoutCount} possible layouts`;
+    return `<details class="uncertainty-instructions uncertainty-rules">
+        <summary><span>Rules</span><span class="uncertainty-rules-context">${description}</span></summary>
+        <div class="uncertainty-rules-content">${modalInstructions(q)}</div>
+    </details>`;
+}
+
+function renderAnswerButtons() {
+    const isUncertainty = isModalQuestion();
+    if (typeof gameArea !== 'undefined' && gameArea) {
+        gameArea.classList.toggle('uncertainty-mode', isUncertainty);
+        gameArea.classList.toggle('infinite-mode', question?.type === 'infinite');
+    }
+    if (typeof confirmationButtons !== 'undefined' && confirmationButtons) {
+        confirmationButtons.classList.toggle('uncertainty-mode', isUncertainty);
+    }
+    if (couldButton) {
+        couldButton.hidden = !isUncertainty;
+        couldButton.title = 'True in some, but not all layouts (2 / K / ↓)';
+    }
+    if (trueButton) {
+        trueButton.textContent = isUncertainty ? uncertaintyAnswerLabels.must : 'TRUE';
+        trueButton.title = isUncertainty ? 'True in every layout (1 / J / ←)' : 'True (1 / J / ←)';
+    }
+    if (falseButton) {
+        falseButton.textContent = isUncertainty ? uncertaintyAnswerLabels.cannot : 'FALSE';
+        falseButton.title = isUncertainty ? 'True in no layouts (3 / L / →)' : 'False (2 / K / →)';
+    }
+}
 
 const correctlyAnsweredEl = document.querySelector(".correctly-answered");
 const nextLevelEl = document.querySelector(".next-level");
@@ -87,6 +142,9 @@ function registerEventHandlers() {
         }
 
         if (input.type === "number") {
+            if (['uncertaintyMinLayouts', 'uncertaintyMaxLayouts', 'uncertaintyConclusions'].includes(value)) {
+                input.addEventListener('change', populateSettings);
+            }
             input.addEventListener("input", evt => {
 
                 let num = input?.value;
@@ -104,6 +162,15 @@ function registerEventHandlers() {
                         return;
                     }
                 } else {
+                    if (['uncertaintyMinLayouts', 'uncertaintyMaxLayouts', 'uncertaintyConclusions'].includes(value)) {
+                        if (!Number.isInteger(+num)) return;
+                        savedata[value] = +num;
+                        if (value === 'uncertaintyMinLayouts' && +num > savedata.uncertaintyMaxLayouts) {
+                            savedata.uncertaintyMaxLayouts = +num;
+                        } else if (value === 'uncertaintyMaxLayouts' && +num < savedata.uncertaintyMinLayouts) {
+                            savedata.uncertaintyMinLayouts = +num;
+                        }
+                    }
                     savedata[value] = +num;
                 }
                 refresh();
@@ -175,6 +242,16 @@ function populateSettings() {
     populateProgressionDropdown();
     populateAppearanceSettings();
 
+    const uncOptions = document.getElementById('uncertainty-options');
+    if (uncOptions) uncOptions.disabled = !savedata.enableUncertainty;
+    const uncFinite = document.getElementById('uncertainty-finite-options');
+    if (uncFinite) uncFinite.hidden = !!savedata.enableInfinite;
+    const uncInfinite = document.getElementById('uncertainty-infinite-options');
+    if (uncInfinite) uncInfinite.hidden = !savedata.enableInfinite;
+
+    const advRRTOptions = document.getElementById('advanced-rrt-options');
+    if (advRRTOptions) advRRTOptions.disabled = !savedata.enableAdvancedRRT;
+
     timerInput.value = savedata.timer;
     timerTime = timerInput.value;
 }
@@ -191,13 +268,15 @@ function carouselInit() {
 }
 
 function displayInit() {
+    renderAnswerButtons();
     const q = renderJunkEmojis(question);
     const conclusions = q.conclusionsList || [{ text: q.conclusion, isValid: q.isValid }];
     const currentConc = conclusions[currentConclusionIndex];
     const currentConcText = renderJunkEmojis({ conclusion: currentConc.text }).conclusion;
 
     displayLabelType.textContent = q.category.split(":")[0];
-    displayLabelLevel.textContent = (q.plen || q.premises.length) + "p";
+    displayLabelLevel.textContent = (q.plen || q.premises.length) + "p"
+        + (q.type === 'infinite' ? ' · ∞ layouts' : (q.type === 'uncertainty' || q.type === 'advanced-rrt-modal') ? ` · ${q.layoutCount} layouts` : '');
     const easy = savedata.scrambleFactor < 12 ? ' (easy)' : '';
 
     const concHeader = conclusions.length > 1
@@ -205,6 +284,7 @@ function displayInit() {
         : `Conclusion`;
 
     displayText.innerHTML = [
+        ...(q.instructions ? [modalRulesHTML(q)] : []),
         `<div class="preamble">Premises${easy}</div>`,
         ...q.premises.map(p => `<div class="formatted-premise">${p}</div>`),
         ...((q.operations && q.operations.length > 0) ? ['<div class="transform-header">Transformations</div>'] : []),
@@ -364,6 +444,7 @@ function disableConfirmationButtons() {
 }
 
 function renderCarousel() {
+    renderAnswerButtons();
     if (!savedata.enableCarouselMode) {
         display.classList.add("visible");
         carousel.classList.remove("visible");
@@ -421,6 +502,7 @@ function renderCarousel() {
     } else {
         if (carouselControls) carouselControls.style.display = "none";
         carouselNextButton.disabled = true;
+        renderAnswerButtons();
         enableConfirmationButtons();
         if (h2) {
             h2.style.padding = "";
@@ -513,7 +595,8 @@ function generateQuestion() {
         savedata.enableDirection,
         savedata.enableDirection3D,
         savedata.enableDirection4D,
-        savedata.enableAnchorSpace
+        savedata.enableAnchorSpace,
+        savedata.enableAdvancedRRT
     ].reduce((a, c) => a + +c, 0) > 0;
 
     const binaryEnable = [
@@ -522,6 +605,8 @@ function generateQuestion() {
         savedata.enableDirection,
         savedata.enableDirection3D,
         savedata.enableDirection4D,
+        savedata.enableAnchorSpace,
+        savedata.enableAdvancedRRT,
         savedata.enableSyllogism
     ].reduce((a, c) => a + +c, 0) > 1;
 
@@ -532,6 +617,11 @@ function generateQuestion() {
 
     const banNormalModes = savedata.onlyAnalogy || savedata.onlyBinary;
     if (!banNormalModes) {
+        if (savedata.enableUncertainty) {
+            generators.push(savedata.enableInfinite
+                ? createInfiniteGenerator(quota)
+                : createUncertaintyGenerator(quota));
+        }
         if (savedata.enableDistinction)
             generators.push(createDistinctionGenerator(quota));
         if (savedata.enableLinear)
@@ -546,6 +636,8 @@ function generateQuestion() {
             generators.push(createDirection4DGenerator(quota));
         if (savedata.enableAnchorSpace)
             generators.push(createAnchorSpaceGenerator(quota));
+        if (savedata.enableAdvancedRRT && typeof createAdvancedRRTGenerator === 'function')
+            generators.push(createAdvancedRRTGenerator(quota));
     }
     if (
      savedata.enableAnalogy
@@ -1850,23 +1942,47 @@ function init() {
 
     currentConclusionIndex = 0;
 
-    const multiCheckbox = document.querySelector("#enable-multiple-conclusions");
-    const numInput = document.querySelector("#number-of-conclusions");
-
-    const isMultiEnabled = !!(savedata.enableMultipleConclusions || (multiCheckbox && multiCheckbox.checked));
-    const countVal = savedata.numberOfConclusions || (numInput ? parseInt(numInput.value, 10) : 3);
-
-    const numConclusions = isMultiEnabled ? Math.max(1, countVal) : 1;
-
-    const originalConclusion = question.conclusion;
-    const originalIsValid = question.isValid;
-    question.conclusionsList = generateUniqueConclusions(question, numConclusions);
-
-    if (question.conclusionsList.length > 1) {
-        question.originalConclusion = originalConclusion;
-        question.originalIsValid = originalIsValid;
+    if (isModalQuestion(question)) {
+        if (question.conclusions && question.conclusions.length > 0) {
+            question.conclusionsList = question.conclusions.map(c => ({
+                text: c.conclusion,
+                conclusionRelation: c.conclusionRelation,
+                correctAnswer: c.correctAnswer,
+                matchingLayoutCount: c.matchingLayoutCount,
+                witnesses: c.witnesses,
+                isValid: c.correctAnswer === 'must',
+            }));
+        } else {
+            question.conclusionsList = [{
+                text: question.conclusion,
+                conclusionRelation: question.conclusionRelation,
+                correctAnswer: question.correctAnswer,
+                matchingLayoutCount: question.matchingLayoutCount,
+                witnesses: question.witnesses,
+                isValid: question.correctAnswer === 'must',
+            }];
+        }
         question.conclusion = question.conclusionsList[0].text;
-        question.isValid = question.conclusionsList[0].isValid;
+        question.correctAnswer = question.conclusionsList[0].correctAnswer;
+    } else {
+        const multiCheckbox = document.querySelector("#enable-multiple-conclusions");
+        const numInput = document.querySelector("#number-of-conclusions");
+
+        const isMultiEnabled = !!(savedata.enableMultipleConclusions || (multiCheckbox && multiCheckbox.checked));
+        const countVal = savedata.numberOfConclusions || (numInput ? parseInt(numInput.value, 10) : 3);
+
+        const numConclusions = isMultiEnabled ? Math.max(1, countVal) : 1;
+
+        const originalConclusion = question.conclusion;
+        const originalIsValid = question.isValid;
+        question.conclusionsList = generateUniqueConclusions(question, numConclusions);
+
+        if (question.conclusionsList.length > 1) {
+            question.originalConclusion = originalConclusion;
+            question.originalIsValid = originalIsValid;
+            question.conclusion = question.conclusionsList[0].text;
+            question.isValid = question.conclusionsList[0].isValid;
+        }
     }
 
     stopCountDown();
@@ -2028,7 +2144,11 @@ function processConclusionAnswer(userAnswer) {
 
     const currentConc = question.conclusionsList[currentConclusionIndex];
     currentConc.answerUser = userAnswer;
-    currentConc.isCorrect = (userAnswer === currentConc.isValid);
+    if (isModalQuestion()) {
+        currentConc.isCorrect = (userAnswer === currentConc.correctAnswer);
+    } else {
+        currentConc.isCorrect = (userAnswer === currentConc.isValid);
+    }
 
     const isLastStep = currentConclusionIndex >= question.conclusionsList.length - 1;
 
@@ -2066,12 +2186,19 @@ function processConclusionAnswer(userAnswer) {
 
 function checkIfTrue() {
     trueButton.blur();
-    processConclusionAnswer(true);
+    processConclusionAnswer(isModalQuestion() ? 'must' : true);
+}
+
+function checkIfCould() {
+    if (couldButton) couldButton.blur();
+    if (isModalQuestion()) {
+        processConclusionAnswer('could');
+    }
 }
 
 function checkIfFalse() {
     falseButton.blur();
-    processConclusionAnswer(false);
+    processConclusionAnswer(isModalQuestion() ? 'cannot' : false);
 }
 
 function timeElapsed() {
@@ -2193,12 +2320,21 @@ function createHQLI(question, i) {
         responseTimeHtml = `<div class="hqli-response-time">${Math.round((q.answeredAt - q.startedAt) / 1000)} sec</div>`;
     }
 
-    const conclusions = q.conclusionsList || [{ text: q.conclusion, isValid: q.isValid, answerUser: q.answerUser, isCorrect: q.correctness === 'right' }];
+    const isUncertainty = isModalQuestion(q);
+    const displayAnswer = value => isUncertainty ? (uncertaintyAnswerLabels[value] || ('' + value).toUpperCase()) : ('' + value).toUpperCase();
+
+    const conclusions = q.conclusionsList || [{
+        text: q.conclusion,
+        isValid: q.isValid,
+        correctAnswer: q.correctAnswer,
+        answerUser: q.answerUser,
+        isCorrect: q.correctness === 'right'
+    }];
     
     const conclusionsHtml = conclusions.map((c, idx) => {
         const cText = renderJunkEmojis({ conclusion: c.text }).conclusion;
-        const cUserAns = c.answerUser !== undefined ? ('' + c.answerUser).toUpperCase() : '(TIMED OUT)';
-        const cRightAns = ('' + c.isValid).toUpperCase();
+        const cUserAns = c.answerUser !== undefined ? displayAnswer(c.answerUser) : '(TIMED OUT)';
+        const cRightAns = isUncertainty ? displayAnswer(c.correctAnswer) : displayAnswer(c.isValid);
         const cUserClass = c.isCorrect ? 'right' : 'wrong';
         const label = conclusions.length > 1 ? `Conclusion ${idx + 1}` : 'Conclusion';
 
@@ -2206,7 +2342,7 @@ function createHQLI(question, i) {
             <div class="hqli-postamble">${label}</div>
             <div class="hqli-conclusion">${cText}</div>
             <div class="hqli-answer-user ${cUserClass}">${cUserAns}</div>
-            <div class="hqli-answer ${c.isValid}">${cRightAns}</div>
+            <div class="hqli-answer ${isUncertainty ? (c.correctAnswer || 'must') : c.isValid}">${cRightAns}</div>
         `;
     }).join('\n');
 
@@ -2305,7 +2441,7 @@ let dehoverQueue = [];
 function handleKeyPress(event) {
     const tagName = event.target.tagName.toLowerCase();
     const isEditable = event.target.isContentEditable;
-    if (tagName === "button" || tagName === "input" || tagName === "textarea" || isEditable) {
+    if (event.repeat || document.querySelector('.uncertainty-explanation[open]') || tagName === "button" || tagName === "input" || tagName === "textarea" || isEditable) {
         return;
     }
     switch (event.code) {
@@ -2344,7 +2480,23 @@ function handleKeyPress(event) {
             break;
         case "KeyK":
         case "Digit2":
-            checkIfFalse();
+            if (isModalQuestion()) {
+                checkIfCould();
+            } else {
+                checkIfFalse();
+            }
+            break;
+        case "KeyL":
+        case "Digit3":
+            if (isModalQuestion()) {
+                checkIfFalse();
+            }
+            break;
+        case "ArrowDown":
+            if (isModalQuestion()) {
+                event.preventDefault();
+                checkIfCould();
+            }
             break;
         case "ArrowLeft":
             if (savedata.enableCarouselMode && !carouselNextButton.disabled) {
