@@ -255,7 +255,7 @@ class ProfileStore {
         this.uncompressSavedata(savedataObj);
 
         const unsafeKeys = Object.keys(savedataObj);
-        for (const key in unsafeKeys) {
+        for (const key of unsafeKeys) {
             if (!defaultSavedata.hasOwnProperty(key)) {
                 delete savedataObj[key];
                 continue;
@@ -266,7 +266,7 @@ class ProfileStore {
             }
         }
 
-        for (const [key, defaultValue] in Object.entries(defaultSavedata)) {
+        for (const [key, defaultValue] of Object.entries(defaultSavedata)) {
             if (!savedataObj.hasOwnProperty(key)) {
                 savedataObj[key] = defaultValue;
             }
