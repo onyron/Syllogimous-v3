@@ -146,9 +146,53 @@ const ADVANCED_RRT_FULL_7D = (() => {
 const ADVANCED_RRT_INSTRUCTIONS = 'Premises establish multi-dimensional relationships across space, vertical plane, time, and scale. Analyze the transitive coordinate displacements or second-order relational analogies between the elements.';
 const ADVANCED_RRT_MODAL_INSTRUCTIONS = 'Multi-dimensional premises contain incomplete or uncertain constraints. ALWAYS holds in all possible layouts; SOMETIMES in some but not all; NEVER in none. MUST BE = holds in all layouts; COULD OR COULD NOT BE = holds in some layouts; COULD NOT BE = holds in none.';
 
+const ADVANCED_RRT_FACING_HEADINGS = [
+    { name: "North", vector: [0, 1] },
+    { name: "East", vector: [1, 0] },
+    { name: "South", vector: [0, -1] },
+    { name: "West", vector: [-1, 0] }
+];
+
+const ADVANCED_RRT_EGOCENTRIC_RELATIONS = [
+    { name: "in front of", relVec: [0, 1] },
+    { name: "behind", relVec: [0, -1] },
+    { name: "to the right of", relVec: [1, 0] },
+    { name: "to the left of", relVec: [-1, 0] },
+    { name: "to the front-right of", relVec: [1, 1] },
+    { name: "to the front-left of", relVec: [-1, 1] },
+    { name: "to the back-right of", relVec: [1, -1] },
+    { name: "to the back-left of", relVec: [-1, -1] }
+];
+
+const ADVANCED_RRT_CARDINAL_EGOCENTRIC = ADVANCED_RRT_EGOCENTRIC_RELATIONS.slice(0, 4);
+
+function egocentricToGlobal2D(relVec, headingVec) {
+    const [lx, ly] = relVec;
+    const [hx, hy] = headingVec;
+    const gx = lx * hy + ly * hx;
+    const gy = -lx * hx + ly * hy;
+    return [Math.sign(gx), Math.sign(gy)];
+}
+
+function globalToEgocentric2D(globalVec, headingVec) {
+    const [gx, gy] = [Math.sign(globalVec[0]), Math.sign(globalVec[1])];
+    const [hx, hy] = headingVec;
+    const lx = gx * hy - gy * hx;
+    const ly = gx * hx + gy * hy;
+    const normLx = Math.sign(lx);
+    const normLy = Math.sign(ly);
+    for (const ego of ADVANCED_RRT_EGOCENTRIC_RELATIONS) {
+        if (ego.relVec[0] === normLx && ego.relVec[1] === normLy) {
+            return ego.name;
+        }
+    }
+    return null;
+}
+
 function getAdvancedRRTDirections(mode) {
     switch (mode) {
         case 'spatial':
+        case 'spatial_facing':
             return ADVANCED_RRT_SPATIAL;
         case 'spatial_vertical':
             return ADVANCED_RRT_SPATIAL_VERTICAL;
@@ -183,6 +227,19 @@ function formatAdvancedRRTRelationHTML(itemA, directionName, itemB, modality = n
     return `<span class="subject">${itemA}</span> <span class="relation">is ${modHTML}${directionName}</span> <span class="subject">${itemB}</span>`;
 }
 
+function formatAdvancedRRTFacingRelationHTML(itemA, egoName, itemB, refHeadingName, modality = null) {
+    const modHTML = modality ? `<strong>${modality}</strong> ` : '';
+    const headingBadge = `<span class="facing-badge">(facing ${refHeadingName})</span>`;
+    return `<span class="subject">${itemA}</span> <span class="relation">is ${modHTML}${egoName}</span> <span class="subject">${itemB}</span> ${headingBadge}`;
+}
+
+function formatAdvancedRRTSwapHTML(itemA, itemB) {
+    if (typeof savedata !== 'undefined' && savedata.minimalMode) {
+        return `<span class="subject">${itemA}</span> <span class="swap-command">⇄</span> <span class="subject">${itemB}</span>`;
+    }
+    return `<span class="swap-command">⇄ Swap</span> <span class="subject">${itemA}</span> <span class="swap-with">with</span> <span class="subject">${itemB}</span>`;
+}
+
 function formatAdvancedRRTAnalogyHTML(itemA1, itemB1, itemA2, itemB2, isSame = true) {
     const statement = isSame
         ? '<div class="analogy-statement">has the same relation as</div>'
@@ -190,7 +247,7 @@ function formatAdvancedRRTAnalogyHTML(itemA1, itemB1, itemA2, itemB2, isSame = t
     return `<span class="subject">${itemA1}</span> to <span class="subject">${itemB1}</span> ${statement} <span class="subject">${itemA2}</span> to <span class="subject">${itemB2}</span>`;
 }
 
-function createAdvancedRRTQuestion(length, settings = savedata) {
+function createAdvancedRRTQuestion(length, settings = (typeof savedata !== 'undefined' ? savedata : {})) {
     const premiseOverride = settings?.overrideAdvancedRRTPremises;
     const premiseCount = Number.isFinite(Number(premiseOverride)) && Number(premiseOverride) >= 2
         ? Number(premiseOverride)
@@ -199,6 +256,10 @@ function createAdvancedRRTQuestion(length, settings = savedata) {
     const mode = settings?.advancedRRTMode || 'spatial_temporal_vertical';
     const isAnalogyAllowed = settings?.advancedRRTAnalogy ?? true;
     const isModal = settings?.advancedRRTModal ?? false;
+    const isFacing = Boolean(settings?.advancedRRTFacing || mode === 'spatial_facing');
+    const isSwap = Boolean(settings?.advancedRRTSwap);
+    const swapCount = Math.max(1, Math.min(5, Number(settings?.advancedRRTSwapCount) || 1));
+
     const directions = getAdvancedRRTDirections(mode);
     const dimCount = directions[0].vector.length;
 
@@ -208,74 +269,146 @@ function createAdvancedRRTQuestion(length, settings = savedata) {
         words.push(`Item ${words.length + 1}`);
     }
 
-    // 2. Build baseline layout with non-backtracking walk
-    let baseLayout, edges, premisesHTML;
-    let targetSubject, targetReference, actualVector, actualDirName;
+    // Assign initial headings if facing is active
+    let headings = null;
+    if (isFacing) {
+        headings = {};
+        for (const word of words) {
+            headings[word] = ADVANCED_RRT_FACING_HEADINGS[Math.floor(Math.random() * ADVANCED_RRT_FACING_HEADINGS.length)];
+        }
+    }
 
-    for (let attempt = 0; attempt < 20; attempt++) {
+    // 2. Build baseline layout with non-backtracking walk
+    let baseLayout, edges;
+
+    for (let attempt = 0; attempt < 30; attempt++) {
         baseLayout = { [words[0]]: new Array(dimCount).fill(0) };
         edges = [];
-        premisesHTML = [];
         let prevVec = null;
 
         for (let i = 0; i < premiseCount; i++) {
             const subject = words[i + 1];
             const reference = words[i];
-            let candidates = directions;
-            if (prevVec) {
-                const nonInverse = directions.filter(d => !d.vector.every((val, idx) => val === -prevVec[idx]));
-                if (nonInverse.length > 0) candidates = nonInverse;
-            }
-            const chosenDir = candidates[Math.floor(Math.random() * candidates.length)];
-            prevVec = chosenDir.vector;
 
-            const refCoord = baseLayout[reference];
-            const subCoord = refCoord.map((val, axis) => val + chosenDir.vector[axis]);
-            baseLayout[subject] = subCoord;
-
-            edges.push({
-                subject,
-                reference,
-                direction: chosenDir,
-            });
-        }
-
-        // Try standard end-to-end pair
-        targetSubject = words[words.length - 1];
-        targetReference = words[0];
-        actualVector = baseLayout[targetSubject].map((v, a) => v - baseLayout[targetReference][a]);
-        actualDirName = getDirectionFromVectorAdvanced(actualVector, mode);
-
-        if (!actualDirName) {
-            // Find distant pair with valid non-zero direction
-            for (let span = words.length - 1; span >= 1; span--) {
-                for (let i = 0; i + span < words.length; i++) {
-                    const sub = words[i + span];
-                    const ref = words[i];
-                    const vec = baseLayout[sub].map((v, a) => v - baseLayout[ref][a]);
-                    const dir = getDirectionFromVectorAdvanced(vec, mode);
-                    if (dir) {
-                        targetSubject = sub;
-                        targetReference = ref;
-                        actualVector = vec;
-                        actualDirName = dir;
-                        break;
-                    }
+            if (isFacing) {
+                const refHeading = headings[reference];
+                let candidates = ADVANCED_RRT_CARDINAL_EGOCENTRIC;
+                if (prevVec) {
+                    const nonInv = candidates.filter(c => {
+                        const g2d = egocentricToGlobal2D(c.relVec, refHeading.vector);
+                        return !(g2d[0] === -prevVec[0] && g2d[1] === -prevVec[1]);
+                    });
+                    if (nonInv.length > 0) candidates = nonInv;
                 }
-                if (actualDirName) break;
+                const chosenEgo = candidates[Math.floor(Math.random() * candidates.length)];
+                const g2d = egocentricToGlobal2D(chosenEgo.relVec, refHeading.vector);
+                prevVec = [g2d[0], g2d[1], 0, 0, 0, 0, 0];
+
+                const stepVec = new Array(dimCount).fill(0);
+                stepVec[0] = g2d[0];
+                stepVec[1] = g2d[1];
+
+                let nonSpatialLabel = '';
+                if (mode === 'spatial_vertical' || mode === 'spatial_temporal_vertical' || mode === 'full_7d') {
+                    const vert = Math.random() < 0.5 ? 1 : -1;
+                    stepVec[2] = vert;
+                    nonSpatialLabel += vert === 1 ? ' and Above' : ' and Below';
+                }
+                if (mode === 'spatial_temporal' || mode === 'spatial_temporal_vertical' || mode === 'full_7d') {
+                    const temp = Math.random() < 0.5 ? 1 : -1;
+                    stepVec[3] = temp;
+                    nonSpatialLabel += temp === 1 ? ' and After' : ' and Before';
+                }
+
+                const refCoord = baseLayout[reference];
+                baseLayout[subject] = refCoord.map((val, axis) => val + stepVec[axis]);
+
+                edges.push({
+                    subject,
+                    reference,
+                    direction: {
+                        name: `${chosenEgo.name}${nonSpatialLabel}`,
+                        egoName: chosenEgo.name,
+                        vector: stepVec,
+                    },
+                    refHeadingName: refHeading.name,
+                    isFacing: true,
+                });
+            } else {
+                let candidates = directions;
+                if (prevVec) {
+                    const nonInverse = directions.filter(d => !d.vector.every((val, idx) => val === -prevVec[idx]));
+                    if (nonInverse.length > 0) candidates = nonInverse;
+                }
+                const chosenDir = candidates[Math.floor(Math.random() * candidates.length)];
+                prevVec = chosenDir.vector;
+
+                const refCoord = baseLayout[reference];
+                const subCoord = refCoord.map((val, axis) => val + chosenDir.vector[axis]);
+                baseLayout[subject] = subCoord;
+
+                edges.push({
+                    subject,
+                    reference,
+                    direction: chosenDir,
+                    isFacing: false,
+                });
             }
         }
-
-        if (actualDirName) break;
+        break;
     }
 
-    if (!actualDirName) {
-        actualDirName = directions[0].name;
+    // Format premises HTML from edges
+    const premisesHTML = edges.map(e => {
+        if (e.isFacing) {
+            return formatAdvancedRRTFacingRelationHTML(e.subject, e.direction.name, e.reference, e.refHeadingName);
+        }
+        return formatAdvancedRRTRelationHTML(e.subject, e.direction.name, e.reference);
+    });
+
+    // 3. Apply Object Swaps if enabled
+    const operations = [];
+    const swaps = [];
+    if (isSwap) {
+        for (let s = 0; s < swapCount; s++) {
+            let idxA = Math.floor(Math.random() * words.length);
+            let idxB;
+            do {
+                idxB = Math.floor(Math.random() * words.length);
+            } while (idxB === idxA);
+
+            const itemA = words[idxA];
+            const itemB = words[idxB];
+
+            const tempCoord = baseLayout[itemA];
+            baseLayout[itemA] = baseLayout[itemB];
+            baseLayout[itemB] = tempCoord;
+
+            if (headings) {
+                const tempHeading = headings[itemA];
+                headings[itemA] = headings[itemB];
+                headings[itemB] = tempHeading;
+            }
+
+            swaps.push({ itemA, itemB });
+            operations.push(formatAdvancedRRTSwapHTML(itemA, itemB));
+        }
     }
 
-    // 3. Handle Modal vs Deterministic
+    // Setup instructions
+    let instructions = ADVANCED_RRT_INSTRUCTIONS;
     if (isModal) {
-        // Create an uncertain edge at index 1 or 0
+        instructions = ADVANCED_RRT_MODAL_INSTRUCTIONS;
+    } else if (isFacing && isSwap) {
+        instructions = 'Premises establish spatial positions with facing orientations. Track transformations (⇄ Swap) and perspective rotations in working memory to evaluate the conclusion.';
+    } else if (isFacing) {
+        instructions = 'Entities possess facing orientations (North, East, South, West). Mentally rotate perspectives (in front, behind, right, left) to deduce relative coordinates.';
+    } else if (isSwap) {
+        instructions = 'Premises establish multi-dimensional relationships. Mentally apply the dynamic entity permutations (⇄ Swap) to deduce the final relationship.';
+    }
+
+    // 4. Modal Uncertainty Branch
+    if (isModal) {
         const uncertainIndex = Math.min(1, edges.length - 1);
         const allowedDirs = [
             edges[uncertainIndex].direction,
@@ -291,7 +424,9 @@ function createAdvancedRRTQuestion(length, settings = savedata) {
                     reference: edge.reference,
                     modality: 'SOMETIMES',
                     directions: [allowedDirs[0].name],
-                    html: formatAdvancedRRTRelationHTML(edge.subject, allowedDirs[0].name, edge.reference, 'SOMETIMES')
+                    html: edge.isFacing
+                        ? formatAdvancedRRTFacingRelationHTML(edge.subject, allowedDirs[0].name, edge.reference, edge.refHeadingName, 'SOMETIMES')
+                        : formatAdvancedRRTRelationHTML(edge.subject, allowedDirs[0].name, edge.reference, 'SOMETIMES')
                 });
                 if (forbiddenDirs.length > 0) {
                     premiseConstraints.push({
@@ -299,7 +434,9 @@ function createAdvancedRRTQuestion(length, settings = savedata) {
                         reference: edge.reference,
                         modality: 'NEVER',
                         directions: forbiddenDirs.slice(0, 3).map(d => d.name),
-                        html: formatAdvancedRRTRelationHTML(edge.subject, forbiddenDirs[0].name, edge.reference, 'NEVER')
+                        html: edge.isFacing
+                            ? formatAdvancedRRTFacingRelationHTML(edge.subject, forbiddenDirs[0].name, edge.reference, edge.refHeadingName, 'NEVER')
+                            : formatAdvancedRRTRelationHTML(edge.subject, forbiddenDirs[0].name, edge.reference, 'NEVER')
                     });
                 }
             } else {
@@ -308,7 +445,9 @@ function createAdvancedRRTQuestion(length, settings = savedata) {
                     reference: edge.reference,
                     modality: 'ALWAYS',
                     directions: [edge.direction.name],
-                    html: formatAdvancedRRTRelationHTML(edge.subject, edge.direction.name, edge.reference, 'ALWAYS')
+                    html: edge.isFacing
+                        ? formatAdvancedRRTFacingRelationHTML(edge.subject, edge.direction.name, edge.reference, edge.refHeadingName, 'ALWAYS')
+                        : formatAdvancedRRTRelationHTML(edge.subject, edge.direction.name, edge.reference, 'ALWAYS')
                 });
             }
         });
@@ -321,8 +460,19 @@ function createAdvancedRRTQuestion(length, settings = savedata) {
                 const ref = layout[edge.reference];
                 layout[edge.subject] = ref.map((v, a) => v + dir.vector[a]);
             });
+            // Apply swaps if active to this feasible layout
+            if (isSwap) {
+                swaps.forEach(({ itemA, itemB }) => {
+                    const temp = layout[itemA];
+                    layout[itemA] = layout[itemB];
+                    layout[itemB] = temp;
+                });
+            }
             return layout;
         });
+
+        let targetSubject = words[words.length - 1];
+        let targetReference = words[0];
 
         // Evaluate across layouts
         const layoutVectors = feasibleLayouts.map(l => {
@@ -331,11 +481,9 @@ function createAdvancedRRTQuestion(length, settings = savedata) {
             return cA.map((v, a) => v - cB[a]);
         });
 
-        // Balance target conclusion across MUST, COULD, CANNOT
         const pickType = Math.random();
         let targetDirName;
         if (pickType < 0.33) {
-            // Target a direction that holds in NO layout (CANNOT)
             const nowhere = directions.filter(d => !layoutVectors.some(v => getDirectionFromVectorAdvanced(v, mode) === d.name));
             if (nowhere.length > 0) {
                 targetDirName = nowhere[Math.floor(Math.random() * nowhere.length)].name;
@@ -343,7 +491,6 @@ function createAdvancedRRTQuestion(length, settings = savedata) {
                 targetDirName = getDirectionFromVectorAdvanced(layoutVectors[0], mode) || directions[0].name;
             }
         } else {
-            // Target a direction from one of the layouts (MUST or COULD)
             const available = layoutVectors
                 .map(v => getDirectionFromVectorAdvanced(v, mode))
                 .filter(Boolean);
@@ -359,14 +506,17 @@ function createAdvancedRRTQuestion(length, settings = savedata) {
         else if (holdsCount === 0) modalAnswer = 'cannot';
 
         const concHTML = formatAdvancedRRTRelationHTML(targetSubject, targetDirName, targetReference);
-
         const countdown = Number(settings?.overrideAdvancedRRTTime);
+
         return {
             category: 'Advanced RRT (Modal 7D)',
             type: 'advanced-rrt-modal',
-            instructions: ADVANCED_RRT_MODAL_INSTRUCTIONS,
+            instructions,
             premises: premiseConstraints.map(p => p.html),
             premiseConstraints,
+            operations,
+            swaps,
+            headings,
             layouts: feasibleLayouts,
             layoutCount: feasibleLayouts.length,
             conclusion: concHTML,
@@ -385,11 +535,10 @@ function createAdvancedRRTQuestion(length, settings = savedata) {
         };
     }
 
-    // Deterministic Mode (Direct or Analogy)
+    // 5. Analogy Branch (Deterministic)
     const isAnalogy = isAnalogyAllowed && Math.random() < 0.5 && words.length >= 4;
 
     if (isAnalogy) {
-        // Second-order relational analogy: A1:B1 :: A2:B2
         const getDelta = (itemA, itemB) => {
             const cA = baseLayout[itemA];
             const cB = baseLayout[itemB];
@@ -403,7 +552,6 @@ function createAdvancedRRTQuestion(length, settings = savedata) {
 
         let itemA2, itemB2;
         if (targetIsTrue) {
-            // Find matching pair
             let found = false;
             for (let i = 0; i < words.length; i++) {
                 for (let j = 0; j < words.length; j++) {
@@ -425,7 +573,6 @@ function createAdvancedRRTQuestion(length, settings = savedata) {
                 itemB2 = words[0];
             }
         } else {
-            // Different relation
             for (let i = 0; i < words.length; i++) {
                 for (let j = 0; j < words.length; j++) {
                     if (i === j) continue;
@@ -448,21 +595,20 @@ function createAdvancedRRTQuestion(length, settings = savedata) {
 
         const delta2 = getDelta(itemA2, itemB2);
         const actualMatch = delta1.every((val, a) => val === delta2[a]);
-        const statedSame = true; // "has the same relation as"
+        const statedSame = true;
         const isValid = (statedSame === actualMatch);
 
         const concHTML = formatAdvancedRRTAnalogyHTML(itemA1, itemB1, itemA2, itemB2, statedSame);
-
-        edges.forEach(e => {
-            premisesHTML.push(formatAdvancedRRTRelationHTML(e.subject, e.direction.name, e.reference));
-        });
-
         const countdown = Number(settings?.overrideAdvancedRRTTime);
+
         return {
-            category: 'Advanced RRT (Vector Analogy)',
+            category: isSwap ? 'Advanced RRT (Analogy + Swap)' : 'Advanced RRT (Vector Analogy)',
             type: 'advanced-rrt',
-            instructions: ADVANCED_RRT_INSTRUCTIONS,
+            instructions,
             premises: premisesHTML,
+            operations,
+            swaps,
+            headings,
             conclusion: concHTML,
             isValid,
             correctAnswer: isValid,
@@ -481,29 +627,92 @@ function createAdvancedRRTQuestion(length, settings = savedata) {
         };
     }
 
-    // Direct Multi-Axis Transitive Conclusion
-    edges.forEach(e => {
-        premisesHTML.push(formatAdvancedRRTRelationHTML(e.subject, e.direction.name, e.reference));
-    });
+    // 6. Direct Multi-Axis Transitive Conclusion
+    let targetSubject = words[words.length - 1];
+    let targetReference = words[0];
+    let actualVector = baseLayout[targetSubject].map((v, a) => v - baseLayout[targetReference][a]);
+    let actualDirName = getDirectionFromVectorAdvanced(actualVector, mode);
 
-    const isTrue = Math.random() < 0.5;
-    let presentedDirName = actualDirName;
-    if (!isTrue) {
-        const falseDirs = directions.filter(d => d.name !== actualDirName);
-        presentedDirName = falseDirs.length > 0
-            ? falseDirs[Math.floor(Math.random() * falseDirs.length)].name
-            : directions[0].name;
+    if (!actualDirName) {
+        for (let span = words.length - 1; span >= 1; span--) {
+            for (let i = 0; i + span < words.length; i++) {
+                const sub = words[i + span];
+                const ref = words[i];
+                const vec = baseLayout[sub].map((v, a) => v - baseLayout[ref][a]);
+                const dir = getDirectionFromVectorAdvanced(vec, mode);
+                if (dir) {
+                    targetSubject = sub;
+                    targetReference = ref;
+                    actualVector = vec;
+                    actualDirName = dir;
+                    break;
+                }
+            }
+            if (actualDirName) break;
+        }
+    }
+    if (!actualDirName) {
+        actualDirName = directions[0].name;
+        actualVector = directions[0].vector;
     }
 
-    const isValid = (presentedDirName === actualDirName);
-    const concHTML = formatAdvancedRRTRelationHTML(targetSubject, presentedDirName, targetReference);
+    const isTrue = Math.random() < 0.5;
+    let presentedDirName;
+    let concHTML;
+    let isValid;
+
+    let usedEgocentricConclusion = false;
+    if (isFacing && headings && headings[targetReference]) {
+        const refHeading = headings[targetReference];
+        const actualEgoName = globalToEgocentric2D(actualVector, refHeading.vector);
+        if (actualEgoName && (mode === 'spatial_facing' || Math.random() < 0.6)) {
+            usedEgocentricConclusion = true;
+            if (isTrue) {
+                presentedDirName = actualEgoName;
+                isValid = true;
+            } else {
+                const falseEgos = ADVANCED_RRT_EGOCENTRIC_RELATIONS.filter(e => e.name !== actualEgoName);
+                presentedDirName = falseEgos[Math.floor(Math.random() * falseEgos.length)].name;
+                isValid = false;
+            }
+            concHTML = formatAdvancedRRTFacingRelationHTML(targetSubject, presentedDirName, targetReference, refHeading.name);
+        }
+    }
+
+    if (!usedEgocentricConclusion) {
+        if (isTrue) {
+            presentedDirName = actualDirName;
+            isValid = true;
+        } else {
+            const falseDirs = directions.filter(d => d.name !== actualDirName);
+            presentedDirName = falseDirs.length > 0
+                ? falseDirs[Math.floor(Math.random() * falseDirs.length)].name
+                : directions[0].name;
+            isValid = false;
+        }
+        concHTML = formatAdvancedRRTRelationHTML(targetSubject, presentedDirName, targetReference);
+    }
+
+    let category;
+    if (isFacing && isSwap) {
+        category = 'Advanced RRT (Facing + Swap)';
+    } else if (isFacing) {
+        category = 'Advanced RRT (Facing Space)';
+    } else if (isSwap) {
+        category = 'Advanced RRT (Object Swap)';
+    } else {
+        category = `Advanced RRT (${mode.replace(/_/g, ' ')})`;
+    }
 
     const countdown = Number(settings?.overrideAdvancedRRTTime);
     return {
-        category: `Advanced RRT (${mode.replace(/_/g, ' ')})`,
+        category,
         type: 'advanced-rrt',
-        instructions: ADVANCED_RRT_INSTRUCTIONS,
+        instructions,
         premises: premisesHTML,
+        operations,
+        swaps,
+        headings,
         conclusion: concHTML,
         isValid,
         correctAnswer: isValid,
@@ -518,6 +727,7 @@ function createAdvancedRRTQuestion(length, settings = savedata) {
         actualVector,
         presentedDirName,
         actualDirName,
+        usedEgocentricConclusion,
         startedAt: Date.now(),
         plen: premiseCount,
         ...(Number.isFinite(countdown) && countdown > 0 && { countdown })
@@ -550,8 +760,12 @@ if (typeof module !== 'undefined' && module.exports) {
         ADVANCED_RRT_SPATIAL_TEMPORAL,
         ADVANCED_RRT_SPATIAL_TEMPORAL_VERTICAL,
         ADVANCED_RRT_FULL_7D,
+        ADVANCED_RRT_FACING_HEADINGS,
+        ADVANCED_RRT_EGOCENTRIC_RELATIONS,
         ADVANCED_RRT_INSTRUCTIONS,
         ADVANCED_RRT_MODAL_INSTRUCTIONS,
+        egocentricToGlobal2D,
+        globalToEgocentric2D,
         getAdvancedRRTDirections,
         getDirectionFromVectorAdvanced,
         createAdvancedRRTQuestion,

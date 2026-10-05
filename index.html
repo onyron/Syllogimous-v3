@@ -157,6 +157,7 @@
 									<span class="inline-input__inner">
 										<select id="p-80-mode" style="width: auto; background: var(--bg-color, #1a1a24); color: inherit; border-radius: 4px; padding: 2px 4px;">
 											<option value="spatial">2D Spatial (N/S/E/W)</option>
+											<option value="spatial_facing">2D Spatial Facing (Perspective Rotation)</option>
 											<option value="spatial_vertical">3D Space + Vertical (Above/Below)</option>
 											<option value="spatial_temporal" selected>3D Space + Time (After/Before)</option>
 											<option value="spatial_temporal_vertical">4D Space + Vertical + Time</option>
@@ -177,6 +178,23 @@
 										<label class="switch" for="p-80-modal"></label>
 									</div>
 									<label for="p-80-modal">Modal Uncertainty (MUST/COULD/CANNOT)</label>
+								</div>
+								<div class="ctrl__inner" style="margin-top: 6px;">
+									<div>
+										<input hidden id="p-80-swap" type="checkbox">
+										<label class="switch" for="p-80-swap"></label>
+									</div>
+									<label for="p-80-swap">Object Swaps (⇄ Swap X with Y)</label>
+									<span class="inline-premise-spinner" style="margin-left: auto;">
+										<input id="p-80-swap-count" type="number" min="1" max="5" value="1" style="width: 4ch">ops
+									</span>
+								</div>
+								<div class="ctrl__inner" style="margin-top: 6px;">
+									<div>
+										<input hidden id="p-80-facing" type="checkbox">
+										<label class="switch" for="p-80-facing"></label>
+									</div>
+									<label for="p-80-facing">Facing Space (Egocentric Perspectives)</label>
 								</div>
 								<div class="multi-input" style="margin-top: 8px;">
 									<span class="single-input">

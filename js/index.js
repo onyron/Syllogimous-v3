@@ -132,6 +132,7 @@ function registerEventHandlers() {
     for (const key in keySettingMap) {
         const value = keySettingMap[key];
         const input = document.querySelector("#" + key);
+        if (!input) continue;
 
         if (input.type === "checkbox") {
             const handleCheck = () => {

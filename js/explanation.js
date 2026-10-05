@@ -243,6 +243,41 @@ function createExplanation(question) {
 }
 
 function createAdvancedRRTExplanation(question) {
+    let contextHTML = '';
+
+    if (question.headings) {
+        const headingItems = Object.entries(question.headings)
+            .map(([item, h]) => `<li><span style="color: #38bdf8;">${item}</span>: Facing <strong>${h.name}</strong></li>`)
+            .join('');
+        contextHTML += `
+            <div style="margin-bottom: 8px; text-align: left;">
+                <p><strong>Orientations (Facing Space):</strong></p>
+                <ul style="margin: 4px 0 8px 18px; padding: 0;">${headingItems}</ul>
+            </div>`;
+    }
+
+    if (question.swaps && question.swaps.length > 0) {
+        const swapItems = question.swaps
+            .map((s, idx) => `<li>Step ${idx + 1}: ⇄ <span style="color: #38bdf8;">${s.itemA}</span> swapped with <span style="color: #38bdf8;">${s.itemB}</span></li>`)
+            .join('');
+        contextHTML += `
+            <div style="margin-bottom: 8px; text-align: left;">
+                <p><strong>Transformations Applied (Object Swap):</strong></p>
+                <ul style="margin: 4px 0 8px 18px; padding: 0;">${swapItems}</ul>
+            </div>`;
+    }
+
+    if (question.baseLayout) {
+        const coordItems = Object.entries(question.baseLayout)
+            .map(([item, coord]) => `<li><span style="color: #38bdf8;">${item}</span>: <code>[${coord.join(', ')}]</code></li>`)
+            .join('');
+        contextHTML += `
+            <div style="margin-bottom: 8px; text-align: left;">
+                <p><strong>Final Post-Transformation Coordinates:</strong></p>
+                <ul style="margin: 4px 0 8px 18px; padding: 0;">${coordItems}</ul>
+            </div>`;
+    }
+
     if (question.type === 'advanced-rrt-modal') {
         const layouts = question.layouts || [];
         const labels = { must: 'MUST BE', could: 'COULD OR COULD NOT BE', cannot: 'COULD NOT BE' };
@@ -252,6 +287,7 @@ function createAdvancedRRTExplanation(question) {
             cannot: 'The conclusion does not hold in any possible layout.',
         };
         return `<div class="uncertainty-explanation-summary">
+            ${contextHTML}
             <p>${question.conclusion}</p>
             <p><strong>${labels[question.correctAnswer] || ''}</strong></p>
             <p>${question.matchingLayoutCount} of ${layouts.length} feasible layouts satisfy the condition.</p>
@@ -265,6 +301,7 @@ function createAdvancedRRTExplanation(question) {
         const d2 = question.delta2 ? `[${question.delta2.join(', ')}]` : '';
         const match = question.isValid;
         return `<div class="advanced-rrt-explanation" style="padding: 10px; font-family: monospace;">
+            ${contextHTML}
             <p><strong>Analogy Vector Comparison (2nd Order):</strong></p>
             <p>Pair 1 (${itemA1} &rarr; ${itemB1}): &Delta; = <code>${d1}</code></p>
             <p>Pair 2 (${itemA2} &rarr; ${itemB2}): &Delta; = <code>${d2}</code></p>
@@ -275,9 +312,15 @@ function createAdvancedRRTExplanation(question) {
     const sub = question.targetSubject;
     const ref = question.targetReference;
     const actVec = question.actualVector ? `[${question.actualVector.join(', ')}]` : '';
+    const perspectiveNote = question.usedEgocentricConclusion
+        ? `<p>Perspective Frame: Egocentric relative to ${ref} (facing ${question.headings?.[ref]?.name || 'unknown'})</p>`
+        : '';
+
     return `<div class="advanced-rrt-explanation" style="padding: 10px; font-family: monospace;">
+        ${contextHTML}
         <p><strong>Multi-Axis Cumulative Displacement:</strong></p>
         <p>${sub} relative to ${ref}: &Delta; = <code>${actVec}</code></p>
+        ${perspectiveNote}
         <p>Actual relation: <strong>${question.actualDirName || 'Unknown'}</strong></p>
         <p>Presented relation: <strong>${question.presentedDirName || 'Unknown'}</strong></p>
         <p><strong>Evaluation:</strong> ${question.isValid ? 'Correct (matches actual displacement).' : 'Incorrect (displacement mismatch).'}</p>
