@@ -212,6 +212,49 @@
 								</div>
 							</fieldset>
 						</div>
+						<div class="mb-2 logic-nback-settings">
+							<div class="ctrl__inner">
+								<div>
+									<input hidden id="p-85" type="checkbox">
+									<label class="switch" for="p-85"></label>
+								</div>
+								<label for="p-85">Enable Logic N-Back</label>
+							</div>
+							<fieldset id="logic-nback-options" aria-label="Logic N-Back options">
+								<p class="uncertainty-setting-help">Continuous sliding-window relational deduction: premises flow dynamically, testing working-memory graph binding in real time.</p>
+								<div class="inline-input__outer">
+									<label for="p-85-n">N-Back Level (Window N)</label>
+									<span class="inline-premise-spinner">
+										<input id="p-85-n" type="number" min="2" max="8" value="3" style="width: 5ch">
+									</span>
+								</div>
+								<div class="inline-input__outer" style="margin-top: 6px;">
+									<label for="p-85-mode">Relation Type</label>
+									<span class="inline-input__inner">
+										<select id="p-85-mode" style="width: auto; background: var(--bg-color, #1a1a24); color: inherit; border-radius: 4px; padding: 2px 4px;">
+											<option value="comparison" selected>Comparison (&lt; / &gt;)</option>
+											<option value="temporal">Temporal (Before / After)</option>
+											<option value="topunder">Vertical (Top / Under)</option>
+											<option value="leftright">Horizontal (Left / Right)</option>
+										</select>
+									</span>
+								</div>
+								<div class="inline-input__outer" style="margin-top: 6px;">
+									<span class="single-input">
+										<label for="p-85-premises">Premises</label>
+										<span class="inline-premise-spinner"><input id="p-85-premises" type="number" min="2" max="50" step="1" placeholder="" value="" style="width: 5ch">ps</span>
+									</span>
+									<span class="single-input">
+										<label for="p-85-time">Time</label>
+										<span class="inline-premise-spinner"><input id="p-85-time" type="number" min="1" max="600" placeholder="" value="" style="width: 5ch">sec</span>
+									</span>
+									<span class="single-input">
+										<label for="p-85-weight">Priority</label>
+										<span class="inline-premise-spinner"><input id="p-85-weight" type="number" min="1" max="9999" value="100" style="width: 6ch">%</span>
+									</span>
+								</div>
+							</fieldset>
+						</div>
 						<div class="mb-1">
 							<div class="ctrl__inner">
 								<div>
@@ -2308,6 +2351,7 @@
 		<script src="js/generators/uncertainty.js"></script>
 		<script src="js/generators/infinite.js"></script>
 		<script src="js/generators/advanced-rrt.js"></script>
+		<script src="js/generators/logic-nback.js"></script>
 		<script src="js/generators/meta.js"></script>
 		<script src="js/generators/distinction.js"></script>
 		<script src="js/generators/linear.js"></script>

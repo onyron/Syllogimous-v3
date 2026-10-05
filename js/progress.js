@@ -7,6 +7,8 @@ const TYPE_TO_OVERRIDES = {
     "space-three-d": [ "overrideDirection3DPremises", "overrideDirection3DTime" ],
     "space-time"   : [ "overrideDirection4DPremises", "overrideDirection4DTime" ],
     "anchor-space" : [ "overrideAnchorSpacePremises", "overrideAnchorSpaceTime" ],
+    "advanced-rrt" : [ "overrideAdvancedRRTPremises", "overrideAdvancedRRTTime" ],
+    "logic-nback"  : [ "overrideLogicNBackPremises" , "overrideLogicNBackTime" ],
 };
 
 const COMMON_TYPES = [

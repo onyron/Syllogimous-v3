@@ -43,6 +43,28 @@ function modalRulesHTML(q) {
 }
 
 function renderAnswerButtons() {
+    if (question && question.type === 'logic-nback') {
+        if (question.isFilling) {
+            if (trueButton) trueButton.style.display = 'none';
+            if (falseButton) falseButton.style.display = 'none';
+            if (couldButton) couldButton.hidden = true;
+        } else {
+            if (trueButton) {
+                trueButton.style.display = '';
+                trueButton.textContent = 'TRUE';
+                trueButton.title = 'True (1 / J / ←)';
+            }
+            if (falseButton) {
+                falseButton.style.display = '';
+                falseButton.textContent = 'FALSE';
+                falseButton.title = 'False (2 / K / →)';
+            }
+            if (couldButton) couldButton.hidden = true;
+        }
+        return;
+    }
+    if (trueButton) trueButton.style.display = '';
+    if (falseButton) falseButton.style.display = '';
     const isUncertainty = isModalQuestion();
     if (typeof gameArea !== 'undefined' && gameArea) {
         gameArea.classList.toggle('uncertainty-mode', isUncertainty);
@@ -255,6 +277,9 @@ function populateSettings() {
     const advRRTOptions = document.getElementById('advanced-rrt-options');
     if (advRRTOptions) advRRTOptions.disabled = !savedata.enableAdvancedRRT;
 
+    const lnbOptions = document.getElementById('logic-nback-options');
+    if (lnbOptions) lnbOptions.disabled = !savedata.enableLogicNBack;
+
     const carouselSuboptions = document.getElementById('carousel-suboptions');
     if (carouselSuboptions) {
         carouselSuboptions.hidden = !savedata.enableCarouselMode;
@@ -286,6 +311,49 @@ function carouselInit() {
 
 function displayInit() {
     renderAnswerButtons();
+    if (!question) return;
+
+    if (question.type === 'logic-nback') {
+        const q = question;
+        displayLabelType.textContent = "Logic N-Back";
+        displayLabelLevel.textContent = `N=${q.windowSize} · Step ${q.stepNumber}`;
+
+        let dotsHtml = '';
+        for (let i = 1; i <= q.windowSize; i++) {
+            const isLit = i <= q.activeCount;
+            dotsHtml += `<span class="lnb-dot ${isLit ? 'active' : ''}" style="display:inline-block;width:12px;height:12px;border-radius:50%;margin:0 4px;background:${isLit ? 'var(--accent, #6ee7ff)' : 'rgba(255,255,255,0.2)'};box-shadow:${isLit ? '0 0 8px var(--accent, #6ee7ff)' : 'none'};"></span>`;
+        }
+
+        if (q.isFilling) {
+            displayText.innerHTML = [
+                `<div class="preamble" style="text-align:center;font-weight:600;letter-spacing:1px;color:var(--accent,#6ee7ff);">MEMORY BUFFER (${q.stepNumber}/${q.windowSize})</div>`,
+                `<div style="text-align:center;margin:10px 0 14px 0;">${dotsHtml}</div>`,
+                `<div class="formatted-premise" style="font-size:1.3rem;text-align:center;margin:20px 0;padding:14px;border-radius:8px;background:rgba(255,255,255,0.05);">${q.currentPremiseHTML}</div>`,
+                `<div class="postamble" style="text-align:center;margin-top:16px;">
+                    <button id="lnb-next-step" class="btn" style="padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:6px;background:var(--accent,#6ee7ff);color:#05070c;font-weight:700;border:none;box-shadow:0 0 12px rgba(110,231,255,0.4);">NEXT PREMISE (Space / ⏎)</button>
+                </div>`
+            ].join('');
+
+            const nextBtn = document.getElementById('lnb-next-step');
+            if (nextBtn) {
+                nextBtn.addEventListener('click', () => {
+                    init();
+                });
+            }
+        } else {
+            displayText.innerHTML = [
+                `<div class="preamble" style="text-align:center;font-weight:600;letter-spacing:1px;color:var(--accent,#6ee7ff);">ACTIVE WINDOW (N = ${q.windowSize})</div>`,
+                `<div style="text-align:center;margin:10px 0 14px 0;">${dotsHtml}</div>`,
+                `<div class="formatted-premise" style="font-size:1.2rem;text-align:center;margin:12px 0;padding:10px;border-radius:8px;background:rgba(255,255,255,0.05);">${q.currentPremiseHTML}</div>`,
+                `<div class="postamble" style="text-align:center;margin-top:14px;color:var(--text-dim, #aaa);">CONCLUSION TO JUDGE:</div>`,
+                `<div class="formatted-conclusion" style="font-size:1.35rem;text-align:center;margin:12px 0;font-weight:bold;">${q.conclusion}</div>`
+            ].join('');
+        }
+
+        renderAnswerButtons();
+        return;
+    }
+
     const q = renderJunkEmojis(question);
     const conclusions = q.conclusionsList || [{ text: q.conclusion, isValid: q.isValid }];
     const currentConc = conclusions[currentConclusionIndex];
@@ -505,7 +573,7 @@ function startCarouselAutoTimer() {
 function renderCarousel() {
     clearCarouselAutoTimer();
     renderAnswerButtons();
-    if (!savedata.enableCarouselMode) {
+    if (!savedata.enableCarouselMode || (question && question.type === 'logic-nback')) {
         display.classList.add("visible");
         carousel.classList.remove("visible");
         enableConfirmationButtons();
@@ -670,6 +738,16 @@ function findStartingTimerState() {
 }
 
 function generateQuestion() {
+    if (savedata.enableLogicNBack && typeof LOGIC_NBACK_STREAM !== 'undefined') {
+        const targetN = Math.max(2, Math.min(8, getPremisesFor('overrideLogicNBackPremises', savedata.logicNBackN || 3)));
+        const targetMode = savedata.logicNBackMode || 'comparison';
+        if (LOGIC_NBACK_STREAM.n !== targetN || LOGIC_NBACK_STREAM.relationType !== targetMode) {
+            LOGIC_NBACK_STREAM.relationType = targetMode;
+            LOGIC_NBACK_STREAM.reset(targetN);
+        }
+        return LOGIC_NBACK_STREAM.nextStep();
+    }
+
     const analogyEnable = [
         savedata.enableDistinction,
         savedata.enableLinear,
@@ -2023,7 +2101,16 @@ function init() {
 
     currentConclusionIndex = 0;
 
-    if (isModalQuestion(question)) {
+    if (question.type === 'logic-nback') {
+        if (!question.isFilling && question.conclusion) {
+            question.conclusionsList = [{
+                text: question.conclusion,
+                isValid: question.isValid
+            }];
+        } else {
+            question.conclusionsList = [];
+        }
+    } else if (isModalQuestion(question)) {
         if (question.conclusions && question.conclusions.length > 0) {
             question.conclusionsList = question.conclusions.map(c => ({
                 text: c.conclusion,
@@ -2220,6 +2307,10 @@ function storeQuestionAndSave() {
 }
 
 function canAnswer() {
+    if (question && question.type === 'logic-nback') {
+        if (question.isFilling) return false;
+        return !processingAnswer;
+    }
     if (savedata.enableCarouselMode) {
         const totalExposureSlides = (question?.premises?.length || 0) + (question?.operations?.length || 0);
         if (carouselIndex < totalExposureSlides) {
@@ -2562,6 +2653,13 @@ function handleKeyPress(event) {
     const isEditable = event.target.isContentEditable;
     if (event.repeat || document.querySelector('.uncertainty-explanation[open]') || tagName === "button" || tagName === "input" || tagName === "textarea" || isEditable) {
         return;
+    }
+    if (question && question.type === 'logic-nback' && question.isFilling) {
+        if (event.code === "Space" || event.code === "Enter" || event.code === "ArrowRight" || event.code === "KeyD") {
+            event.preventDefault();
+            init();
+            return;
+        }
     }
     switch (event.code) {
         case "KeyH":
