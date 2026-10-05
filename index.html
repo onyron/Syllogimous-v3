@@ -1014,6 +1014,31 @@
 								<p class="explainer">
 									See only one word at time.
 								</p>
+								<div id="carousel-suboptions" class="mb-1" style="margin-left: 1.5rem; margin-top: 0.5rem;">
+									<div class="ctrl__inner mb-1">
+										<div>
+											<input hidden id="p-9-auto" type="checkbox">
+											<label class="switch" for="p-9-auto"></label>
+										</div>
+										<span>Auto-Advance Slides</span>
+									</div>
+									<div class="multi-input mb-1" id="carousel-auto-settings">
+										<span class="single-input">
+											Delay
+											<span class="inline-premise-spinner"><input id="p-9-delay" type="number" placeholder="1800" min="200" max="10000" step="50" value="1800" style="width: 6ch">ms</span>
+										</span>
+										<span class="single-input">
+											Adaptive Speed
+											<span class="inline-premise-spinner">
+												<input hidden id="p-9-adaptive" type="checkbox">
+												<label class="switch" for="p-9-adaptive"></label>
+											</span>
+										</span>
+									</div>
+									<p class="explainer" id="carousel-auto-explainer">
+										Paced flash exposure. Slides auto-advance until the conclusion. Adaptive speed automatically adjusts delay based on performance.
+									</p>
+								</div>
 							</div>
 							<div class="mb-1">
 								<div class="ctrl__inner">
@@ -1165,6 +1190,7 @@
 									<span class="carousel_display_label_type"></span>
 									<span class="carousel_display_label_progress"></span>
 								</h2>
+								<div class="carousel_slide_progress"></div>
 								<div class="carousel_display_text"></div>
 							</div>
 						</div>

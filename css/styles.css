@@ -701,6 +701,26 @@ input[type="number"]::-moz-inner-spin-button {
     font-family: monospace;
 }
 
+.carousel_slide_progress {
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(90deg, #2bdef9, #39ff14);
+    box-shadow: 0 0 8px rgba(43, 222, 249, 0.7);
+    border-radius: 2px;
+    opacity: 0;
+    pointer-events: none;
+    transform-origin: left;
+    transform: scaleX(0);
+    z-index: 10;
+}
+
+.carousel_slide_progress.active {
+    opacity: 1;
+}
+
 .display_label_type {
     white-space: nowrap;
 }
@@ -2399,7 +2419,7 @@ dialog.uncertainty-explanation::backdrop {
         font-size: 1.15rem;
     }
 
-    .uncertainty-mode .carousel_display_label-wrapper > div:not(.carousel_display_text) {
+    .uncertainty-mode .carousel_display_label-wrapper > div:not(.carousel_display_text):not(.carousel_slide_progress) {
         display: none;
     }
 

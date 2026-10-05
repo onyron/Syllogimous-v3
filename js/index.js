@@ -101,6 +101,8 @@ const carouselDisplayLabelProgress = carousel.querySelector(".carousel_display_l
 const carouselDisplayText = carousel.querySelector(".carousel_display_text");
 const carouselBackButton = carousel.querySelector("#carousel-back");
 const carouselNextButton = carousel.querySelector("#carousel-next");
+const carouselProgressBar = carousel.querySelector(".carousel_slide_progress");
+let carouselAutoTimer = null;
 
 const display = document.querySelector(".display-outer");
 const displayLabelType = display.querySelector(".display_label_type");
@@ -252,6 +254,20 @@ function populateSettings() {
 
     const advRRTOptions = document.getElementById('advanced-rrt-options');
     if (advRRTOptions) advRRTOptions.disabled = !savedata.enableAdvancedRRT;
+
+    const carouselSuboptions = document.getElementById('carousel-suboptions');
+    if (carouselSuboptions) {
+        carouselSuboptions.hidden = !savedata.enableCarouselMode;
+    }
+    const carouselAutoControls = document.getElementById('carousel-auto-settings');
+    if (carouselAutoControls) {
+        carouselAutoControls.style.opacity = savedata.carouselAutoAdvance ? '1' : '0.4';
+        carouselAutoControls.style.pointerEvents = savedata.carouselAutoAdvance ? 'auto' : 'none';
+    }
+    const carouselAutoExplainer = document.getElementById('carousel-auto-explainer');
+    if (carouselAutoExplainer) {
+        carouselAutoExplainer.style.opacity = savedata.carouselAutoAdvance ? '1' : '0.4';
+    }
 
     timerInput.value = savedata.timer;
     timerTime = timerInput.value;
@@ -444,7 +460,50 @@ function disableConfirmationButtons() {
     confirmationButtons.style.opacity = 0;
 }
 
+function clearCarouselAutoTimer() {
+    if (carouselAutoTimer) {
+        clearTimeout(carouselAutoTimer);
+        carouselAutoTimer = null;
+    }
+    const bar = carousel.querySelector(".carousel_slide_progress");
+    if (bar) {
+        bar.style.transition = "none";
+        bar.style.transform = "scaleX(0)";
+        bar.classList.remove("active");
+    }
+}
+
+function startCarouselAutoTimer() {
+    clearCarouselAutoTimer();
+    if (!savedata.enableCarouselMode || !savedata.carouselAutoAdvance || !question) {
+        return;
+    }
+    const totalExposureSlides = (question.premises ? question.premises.length : 0) + (question.operations ? question.operations.length : 0);
+    if (carouselIndex >= totalExposureSlides) {
+        return;
+    }
+    const delay = Math.max(200, Number(savedata.carouselSlideDelay) || 1800);
+    const bar = carousel.querySelector(".carousel_slide_progress");
+    if (bar) {
+        bar.style.transition = "none";
+        bar.style.transform = "scaleX(1)";
+        bar.classList.add("active");
+        void bar.offsetWidth;
+        requestAnimationFrame(() => {
+            if (!carouselAutoTimer) return;
+            bar.style.transition = `transform ${delay}ms linear`;
+            bar.style.transform = "scaleX(0)";
+        });
+    }
+
+    carouselAutoTimer = setTimeout(() => {
+        carouselAutoTimer = null;
+        carouselNext();
+    }, delay);
+}
+
 function renderCarousel() {
+    clearCarouselAutoTimer();
     renderAnswerButtons();
     if (!savedata.enableCarouselMode) {
         display.classList.add("visible");
@@ -452,6 +511,7 @@ function renderCarousel() {
         enableConfirmationButtons();
         return;
     }
+    if (!question) return;
     const q = renderJunkEmojis(question);
     const conclusions = q.conclusionsList || [{ text: q.conclusion, isValid: q.isValid }];
     const currentConc = conclusions[currentConclusionIndex];
@@ -520,15 +580,28 @@ function renderCarousel() {
             : "";
         carouselDisplayText.innerHTML = currentConcText;
     }
+
+    if (savedata.enableCarouselMode && savedata.carouselAutoAdvance) {
+        const totalExposureSlides = q.premises.length + (q.operations ? q.operations.length : 0);
+        if (carouselIndex < totalExposureSlides) {
+            startCarouselAutoTimer();
+        }
+    }
 }
 
 function carouselBack() {
-    carouselIndex--;
+    clearCarouselAutoTimer();
+    carouselIndex = Math.max(0, carouselIndex - 1);
     renderCarousel();
 }
   
 function carouselNext() {
-    carouselIndex++;
+    clearCarouselAutoTimer();
+    if (!question) return;
+    const maxIndex = (question.premises ? question.premises.length : 0) + (question.operations ? question.operations.length : 0);
+    if (carouselIndex < maxIndex) {
+        carouselIndex++;
+    }
     renderCarousel();
 }
 
@@ -539,6 +612,12 @@ function startCountDown() {
     }
     timerCount = findStartingTimerCount();
     animateTimerBar();
+    if (savedata.enableCarouselMode && savedata.carouselAutoAdvance && question) {
+        const totalExposureSlides = (question.premises ? question.premises.length : 0) + (question.operations ? question.operations.length : 0);
+        if (carouselIndex < totalExposureSlides && !carouselAutoTimer) {
+            startCarouselAutoTimer();
+        }
+    }
 }
 
 function stopCountDown() {
@@ -546,6 +625,7 @@ function stopCountDown() {
     timerCount = findStartingTimerCount();
     timerBar.style.width = '100%';
     clearTimeout(timerInstance);
+    clearCarouselAutoTimer();
 }
 
 function renderTimerBar() {
@@ -2139,8 +2219,38 @@ function storeQuestionAndSave() {
     save();
 }
 
+function canAnswer() {
+    if (savedata.enableCarouselMode) {
+        const totalExposureSlides = (question?.premises?.length || 0) + (question?.operations?.length || 0);
+        if (carouselIndex < totalExposureSlides) {
+            return false;
+        }
+    }
+    return !processingAnswer;
+}
+
+function adjustAdaptiveCarouselDelay(isCorrect) {
+    if (!savedata.enableCarouselMode || !savedata.carouselAutoAdvance || !savedata.carouselAdaptiveDelay) {
+        return;
+    }
+    let currentDelay = Number(savedata.carouselSlideDelay);
+    if (!Number.isFinite(currentDelay) || currentDelay <= 0) {
+        currentDelay = 1800;
+    }
+    if (isCorrect) {
+        currentDelay = Math.max(300, currentDelay - 50);
+    } else {
+        currentDelay = Math.min(5000, currentDelay + 100);
+    }
+    savedata.carouselSlideDelay = currentDelay;
+    const delayInput = document.getElementById("p-9-delay");
+    if (delayInput) {
+        delayInput.value = currentDelay;
+    }
+}
+
 function processConclusionAnswer(userAnswer) {
-    if (processingAnswer) return;
+    if (!canAnswer()) return;
     processingAnswer = true;
 
     const currentConc = question.conclusionsList[currentConclusionIndex];
@@ -2166,6 +2276,9 @@ function processConclusionAnswer(userAnswer) {
     question.allConclusionsCorrect = allCorrect;
     question.answerUser = primaryConclusion?.answerUser;
 
+    clearCarouselAutoTimer();
+    adjustAdaptiveCarouselDelay(allCorrect);
+
     if (allCorrect) {
         appState.score++;
         question.correctness = 'right';
@@ -2186,11 +2299,13 @@ function processConclusionAnswer(userAnswer) {
 }
 
 function checkIfTrue() {
+    if (!canAnswer()) return;
     trueButton.blur();
     processConclusionAnswer(isModalQuestion() ? 'must' : true);
 }
 
 function checkIfCould() {
+    if (!canAnswer()) return;
     if (couldButton) couldButton.blur();
     if (isModalQuestion()) {
         processConclusionAnswer('could');
@@ -2198,6 +2313,7 @@ function checkIfCould() {
 }
 
 function checkIfFalse() {
+    if (!canAnswer()) return;
     falseButton.blur();
     processConclusionAnswer(isModalQuestion() ? 'cannot' : false);
 }
@@ -2207,6 +2323,8 @@ function timeElapsed() {
         return;
     }
     processingAnswer = true;
+    clearCarouselAutoTimer();
+    adjustAdaptiveCarouselDelay(false);
     appState.score--;
     question.correctness = 'missed';
     question.answerUser = undefined;
