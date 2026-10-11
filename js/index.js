@@ -2394,10 +2394,6 @@ function processConclusionAnswer(userAnswer) {
     if (!isLastStep) {
         currentConclusionIndex++;
         processingAnswer = false;
-        if (timerToggled) {
-            stopCountDown();
-            startCountDown();
-        }
         displayInit();
         renderCarousel();
         return;
