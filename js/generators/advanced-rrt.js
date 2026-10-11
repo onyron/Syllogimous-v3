@@ -286,9 +286,15 @@ function createAdvancedRRTQuestion(length, settings = (typeof savedata !== 'unde
         edges = [];
         let prevVec = null;
 
+        const placedWords = [words[0]];
+
         for (let i = 0; i < premiseCount; i++) {
             const subject = words[i + 1];
-            const reference = words[i];
+            const canBranch = typeof savedata !== 'undefined' && savedata.enableConnectionBranching && i > 0 && Math.random() < 0.4;
+            const reference = canBranch
+                ? placedWords[Math.floor(Math.random() * placedWords.length)]
+                : words[i];
+            placedWords.push(subject);
 
             if (isFacing) {
                 const refHeading = headings[reference];
@@ -359,12 +365,16 @@ function createAdvancedRRTQuestion(length, settings = (typeof savedata !== 'unde
     }
 
     // Format premises HTML from edges
-    const premisesHTML = edges.map(e => {
+    let premisesHTML = edges.map(e => {
         if (e.isFacing) {
             return formatAdvancedRRTFacingRelationHTML(e.subject, e.direction.name, e.reference, e.refHeadingName);
         }
         return formatAdvancedRRTRelationHTML(e.subject, e.direction.name, e.reference);
     });
+
+    if (typeof scramble === 'function' && typeof savedata !== 'undefined' && savedata.scrambleFactor > 0) {
+        premisesHTML = scramble(premisesHTML);
+    }
 
     // 3. Apply Object Swaps if enabled
     const operations = [];

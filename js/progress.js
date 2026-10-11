@@ -1,14 +1,17 @@
 const TYPE_TO_OVERRIDES = {
-    "distinction"  : [ "overrideDistinctionPremises", "overrideDistinctionTime" ],
-    "linear"       : [ "overrideLinearPremises"     , "overrideLinearTime" ],
-    "syllogism"    : [ "overrideSyllogismPremises"  , "overrideSyllogismTime" ],
-    "binary"       : [ "overrideBinaryPremises"     , "overrideBinaryTime" ],
-    "space-two-d"  : [ "overrideDirectionPremises"  , "overrideDirectionTime" ],
-    "space-three-d": [ "overrideDirection3DPremises", "overrideDirection3DTime" ],
-    "space-time"   : [ "overrideDirection4DPremises", "overrideDirection4DTime" ],
-    "anchor-space" : [ "overrideAnchorSpacePremises", "overrideAnchorSpaceTime" ],
-    "advanced-rrt" : [ "overrideAdvancedRRTPremises", "overrideAdvancedRRTTime" ],
-    "logic-nback"  : [ "overrideLogicNBackPremises" , "overrideLogicNBackTime" ],
+    "distinction"       : [ "overrideDistinctionPremises", "overrideDistinctionTime" ],
+    "linear"            : [ "overrideLinearPremises"     , "overrideLinearTime" ],
+    "syllogism"         : [ "overrideSyllogismPremises"  , "overrideSyllogismTime" ],
+    "binary"            : [ "overrideBinaryPremises"     , "overrideBinaryTime" ],
+    "space-two-d"       : [ "overrideDirectionPremises"  , "overrideDirectionTime" ],
+    "space-three-d"     : [ "overrideDirection3DPremises", "overrideDirection3DTime" ],
+    "space-time"        : [ "overrideDirection4DPremises", "overrideDirection4DTime" ],
+    "anchor-space"      : [ "overrideAnchorSpacePremises", "overrideAnchorSpaceTime" ],
+    "advanced-rrt"      : [ "overrideAdvancedRRTPremises", "overrideAdvancedRRTTime" ],
+    "advanced-rrt-modal": [ "overrideAdvancedRRTPremises", "overrideAdvancedRRTTime" ],
+    "uncertainty"       : [ "overrideUncertaintyPremises", "overrideUncertaintyTime" ],
+    "infinite"          : [ "overrideInfinitePremises"   , "overrideInfiniteTime" ],
+    "logic-nback"       : [ "overrideLogicNBackPremises" , "overrideLogicNBackTime" ],
 };
 
 const COMMON_TYPES = [
@@ -106,7 +109,9 @@ class ProgressStore {
     }
 
     success(q, trailingProgress, successes, type) {
-        const [overridePremiseSetting, overrideTimerSetting] = TYPE_TO_OVERRIDES[type];
+        const mapping = TYPE_TO_OVERRIDES[type];
+        if (!mapping) return;
+        const [overridePremiseSetting, overrideTimerSetting] = mapping;
         let newTimerValue;
         if (savedata.autoProgressionChange === 'auto') {
             const minUpgrade = q.countdown - 1;
@@ -128,7 +133,9 @@ class ProgressStore {
     }
 
     fail(q, trailingProgress, successes, type) {
-        const [overridePremiseSetting, overrideTimerSetting] = TYPE_TO_OVERRIDES[type];
+        const mapping = TYPE_TO_OVERRIDES[type];
+        if (!mapping) return;
+        const [overridePremiseSetting, overrideTimerSetting] = mapping;
         let newTimerValue;
         if (savedata.autoProgressionChange === 'auto') {
             newTimerValue = q.countdown + 5;
@@ -152,7 +159,7 @@ class ProgressStore {
         trailingProgress.push(q);
         trailingProgress.sort((a, b) => a.timeElapsed - b.timeElapsed);
         const successes = trailingProgress.filter(p => p.correctness === 'right');
-        const commonTypes = this.findCommonTypes(question);
+        const commonTypes = this.findCommonTypes(q);
         if (trailingProgress.length < findAutoProgressionTrailing()) {
             const numFailures = trailingProgress.length - successes.length;
             const bestPercentagePossible = 100 * (findAutoProgressionTrailing() - numFailures) / findAutoProgressionTrailing();
