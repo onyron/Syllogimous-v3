@@ -2352,11 +2352,52 @@ function processConclusionAnswer(userAnswer) {
         currentConc.isCorrect = (userAnswer === currentConc.isValid);
     }
 
+    // Fail fast: immediate WRONG and transition to next question on first incorrect conclusion
+    if (!currentConc.isCorrect) {
+        question.allConclusionsCorrect = false;
+        question.answerUser = userAnswer;
+        question.failedConclusionIndex = currentConclusionIndex;
+        if (question.conclusionsList) {
+            question.conclusionsList = question.conclusionsList.slice(0, currentConclusionIndex + 1);
+        }
+        question.conclusion = currentConc.text;
+        if (currentConc.correctAnswer !== undefined) {
+            question.correctAnswer = currentConc.correctAnswer;
+        }
+        if (currentConc.isValid !== undefined) {
+            question.isValid = currentConc.isValid;
+        }
+        if (currentConc.conclusionRelation !== undefined) {
+            question.conclusionRelation = currentConc.conclusionRelation;
+        }
+        if (currentConc.matchingLayoutCount !== undefined) {
+            question.matchingLayoutCount = currentConc.matchingLayoutCount;
+        }
+        if (currentConc.witnesses !== undefined) {
+            question.witnesses = currentConc.witnesses;
+        }
+
+        clearCarouselAutoTimer();
+        adjustAdaptiveCarouselDelay(false);
+
+        appState.score--;
+        question.correctness = 'wrong';
+        question.answeredAt = new Date().getTime();
+        storeQuestionAndSave();
+        renderHQL(true);
+        wowFeedbackWrong(init);
+        return;
+    }
+
     const isLastStep = currentConclusionIndex >= question.conclusionsList.length - 1;
 
     if (!isLastStep) {
         currentConclusionIndex++;
         processingAnswer = false;
+        if (timerToggled) {
+            stopCountDown();
+            startCountDown();
+        }
         displayInit();
         renderCarousel();
         return;
@@ -2419,6 +2460,16 @@ function timeElapsed() {
     appState.score--;
     question.correctness = 'missed';
     question.answerUser = undefined;
+    if (question && question.conclusionsList) {
+        question.failedConclusionIndex = currentConclusionIndex;
+        question.conclusionsList = question.conclusionsList.slice(0, currentConclusionIndex + 1);
+        const timedOutConc = question.conclusionsList[currentConclusionIndex];
+        if (timedOutConc) {
+            question.conclusion = timedOutConc.text;
+            if (timedOutConc.correctAnswer !== undefined) question.correctAnswer = timedOutConc.correctAnswer;
+            if (timedOutConc.isValid !== undefined) question.isValid = timedOutConc.isValid;
+        }
+    }
     question.answeredAt = new Date().getTime();
     storeQuestionAndSave();
     renderHQL(true);
@@ -2533,13 +2584,16 @@ function createHQLI(question, i) {
     const isUncertainty = isModalQuestion(q);
     const displayAnswer = value => isUncertainty ? (uncertaintyAnswerLabels[value] || ('' + value).toUpperCase()) : ('' + value).toUpperCase();
 
-    const conclusions = q.conclusionsList || [{
+    const allConclusions = q.conclusionsList || [{
         text: q.conclusion,
         isValid: q.isValid,
         correctAnswer: q.correctAnswer,
         answerUser: q.answerUser,
         isCorrect: q.correctness === 'right'
     }];
+    
+    // Completely exclude unreached conclusions from history
+    const conclusions = allConclusions.filter(c => c.answerUser !== undefined || q.correctness === 'missed');
     
     const conclusionsHtml = conclusions.map((c, idx) => {
         const cText = renderJunkEmojis({ conclusion: c.text }).conclusion;
