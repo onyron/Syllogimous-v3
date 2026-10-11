@@ -135,7 +135,7 @@ let savedata = {
     "autoProgressionTimeDrop": 5,
     "autoProgressionTimeBump": 5,
     "enableMultipleConclusions": true,
-    "enableHarderConclusions": false,
+    "enableHarderConclusions": true,
     "numberOfConclusions": 3,
 };
 
@@ -262,6 +262,9 @@ const compressedSettings = {
     "dailyProgressGoal": "dGoal",
     "weeklyProgressGoal": "wGoal",
     "widePremises": "wide",
+    "enableMultipleConclusions": "multiC",
+    "numberOfConclusions": "numC",
+    "enableHarderConclusions": "hardC",
 };
 
 const keySettingMap = {
