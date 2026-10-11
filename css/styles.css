@@ -2187,67 +2187,27 @@ table.distinction {
     overscroll-behavior: contain;
 }
 
-.uncertainty-settings {
-    padding: 0.8rem;
-    border: 1px solid var(--switch-border-color);
-    border-left: 3px solid var(--bracket-color);
-    border-radius: 3px;
-}
-
-.advanced-rrt-settings {
-    padding: 0.8rem;
-    border: 1px solid var(--switch-border-color);
-    border-left: 3px solid #7c3aed;
-    border-radius: 3px;
-    margin-bottom: 0.8rem;
-}
-
-.advanced-rrt-settings fieldset {
+#uncertainty-options,
+#advanced-rrt-options,
+#logic-nback-options,
+#uncertainty-finite-options,
+#uncertainty-infinite-options {
     margin: 0;
     padding: 0;
     border: 0;
     min-width: 0;
 }
 
-#advanced-rrt-options {
-    padding-left: 0.6rem;
+#uncertainty-options:disabled,
+#advanced-rrt-options:disabled,
+#logic-nback-options:disabled {
+    opacity: 0.4;
+    pointer-events: none;
 }
 
-.advanced-rrt-settings > fieldset:disabled {
-    opacity: 0.5;
-}
-
-.uncertainty-settings fieldset {
-    margin: 0;
-    padding: 0;
-    border: 0;
-    min-width: 0;
-}
-
-.uncertainty-settings fieldset[hidden] {
+#uncertainty-finite-options[hidden],
+#uncertainty-infinite-options[hidden] {
     display: none;
-}
-
-#uncertainty-options {
-    padding-left: 0.6rem;
-}
-
-.uncertainty-settings > fieldset:disabled {
-    opacity: 0.5;
-}
-
-.uncertainty-variant-toggle {
-    margin-top: 0.8rem;
-}
-
-.uncertainty-setting-help {
-    margin: 0.55rem 0;
-    font-size: var(--step--2);
-    line-height: 1.5;
-}
-
-.uncertainty-setting-help:last-child {
-    margin-bottom: 0;
 }
 
 .uncertainty-instructions {

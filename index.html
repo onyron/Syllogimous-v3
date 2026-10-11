@@ -71,190 +71,273 @@
 								</span>
 							</div>
 						</div>
-						<div class="mb-2 uncertainty-settings">
+						<div class="mb-1">
 							<div class="ctrl__inner">
 								<div>
 									<input hidden id="p-70" type="checkbox">
 									<label class="switch" for="p-70"></label>
 								</div>
-								<label for="p-70">Enable Uncertainty RRT</label>
+								<label for="p-70">Enable Uncertainty</label>
+								<div class="tooltip-container" tabindex="0">
+									?
+									<div class="tooltip-text right">
+										Multi-model spatial reasoning.<br>
+										Premises allow multiple layouts.<br>
+										MUST = holds in all layouts.<br>
+										COULD = holds in some layouts.<br>
+										CANNOT = holds in no layouts.<br>
+									</div>
+								</div>
 							</div>
-							<fieldset id="uncertainty-options" aria-label="Uncertainty RRT options">
-								<div class="ctrl__inner uncertainty-variant-toggle">
+							<ul class="explainer">
+								<li>A is North of B</li>
+								<li>(MUST / COULD / CANNOT)</li>
+							</ul>
+							<fieldset id="uncertainty-options" aria-label="Uncertainty RRT options" style="margin-left: 1.5rem; margin-top: 0.5rem;">
+								<div class="ctrl__inner mb-1">
 									<div>
 										<input hidden id="p-74" type="checkbox">
 										<label class="switch" for="p-74"></label>
 									</div>
-									<label for="p-74">Infinite mode</label>
-								</div>
-								<p class="uncertainty-setting-help">Choose one Uncertainty variant: leave Infinite mode off for finite layouts, or turn it on for unlimited distances and layouts.</p>
-								<div class="inline-input__outer">
-									<label for="p-76">Conclusions per question</label>
-									<span class="inline-input__inner"><input id="p-76" type="number" min="1" max="5" step="1" value="1" aria-describedby="uncertainty-conclusions-help" style="width: 5ch"></span>
-								</div>
-								<p id="uncertainty-conclusions-help" class="uncertainty-setting-help">Use 1–5 conclusions with the same premises in either variant. Answer each conclusion separately, one at a time. The timer restarts for each conclusion.</p>
-								<fieldset id="uncertainty-finite-options" aria-label="Finite mode options">
-									<p class="uncertainty-setting-help">Finite mode: each premise links neighboring grid squares. ALWAYS holds in all layouts, SOMETIMES in some but not all, and NEVER in none.</p>
-									<div class="inline-input__outer">Spatial layout possibilities (finite mode)</div>
-									<div class="multi-input">
-										<span class="single-input">
-											<label for="p-71">Min layouts</label>
-											<span class="inline-premise-spinner"><input id="p-71" type="number" min="2" max="8" step="1" value="2" aria-describedby="uncertainty-range-help" style="width: 5ch"></span>
-										</span>
-										<span class="single-input">
-											<label for="p-72">Max layouts</label>
-											<span class="inline-premise-spinner"><input id="p-72" type="number" min="2" max="8" step="1" value="4" aria-describedby="uncertainty-range-help" style="width: 5ch"></span>
-										</span>
+									<label for="p-74">Infinite Mode</label>
+									<div class="tooltip-container" tabindex="0">
+										?
+										<div class="tooltip-text right">
+											Unlimited distances and layouts.<br>
+											Leave off for finite layouts,<br>
+											or turn on for unconstrained space.<br>
+										</div>
 									</div>
-									<p id="uncertainty-range-help" class="uncertainty-setting-help">Finite Uncertainty questions have a number of possible layouts within this inclusive range (2–8). This range does not apply to Infinite mode. Raising min above max raises max; lowering max below min lowers min.</p>
+								</div>
+								<div class="ctrl__inner mb-1">
+									<label for="p-76">Conclusions</label>
+									<span class="inline-premise-spinner" style="margin-left: auto; margin-right: 0.5rem;">
+										<input id="p-76" type="number" min="1" max="5" step="1" value="1" style="width: 5ch">qty
+									</span>
+									<div class="tooltip-container" tabindex="0">
+										?
+										<div class="tooltip-text right">
+											1–5 conclusions per question.<br>
+											Answered one at a time.<br>
+											Timer restarts for each.<br>
+										</div>
+									</div>
+								</div>
+								<fieldset id="uncertainty-finite-options" aria-label="Finite mode options">
+									<div class="ctrl__inner mb-1">
+										<span>Layouts (Min / Max)</span>
+										<span style="display: inline-flex; gap: 4px; margin-left: auto; margin-right: 0.5rem;">
+											<span class="inline-premise-spinner"><input id="p-71" type="number" min="2" max="8" step="1" value="2" style="width: 4ch"></span>
+											<span class="inline-premise-spinner"><input id="p-72" type="number" min="2" max="8" step="1" value="4" style="width: 4ch"></span>
+										</span>
+										<div class="tooltip-container" tabindex="0">
+											?
+											<div class="tooltip-text right">
+												Inclusive range of possible<br>
+												spatial layouts (2–8).<br>
+											</div>
+										</div>
+									</div>
 									<div class="multi-input">
 										<span class="single-input">
-											<label for="p-70-premises">Premises</label>
-											<span class="inline-premise-spinner"><input id="p-70-premises" type="number" min="3" max="50" step="1" placeholder="" value="" aria-describedby="uncertainty-premises-help" style="width: 5ch">ps</span>
+											Premises
+											<span class="inline-premise-spinner"><input id="p-70-premises" type="number" min="3" max="50" step="1" placeholder="" value="" style="width: 5ch">ps</span>
 										</span>
 										<span class="single-input">
-											<label for="p-70-time">Time</label>
+											Time
 											<span class="inline-premise-spinner"><input id="p-70-time" type="number" min="1" max="600" placeholder="" value="" style="width: 5ch">sec</span>
 										</span>
 										<span class="single-input">
-											<label for="p-73">Priority</label>
+											Priority
 											<span class="inline-premise-spinner"><input id="p-73" type="number" min="1" max="9999" value="100" style="width: 6ch">%</span>
 										</span>
 									</div>
-									<p id="uncertainty-premises-help" class="uncertainty-setting-help">Leave premises and time blank to use global settings. This mode uses 3–50 premises.</p>
 								</fieldset>
 								<fieldset id="uncertainty-infinite-options" aria-label="Infinite mode options" hidden>
-									<p class="uncertainty-setting-help">Unlimited distances and layouts. ALWAYS North means directly North at any distance. NEVER South excludes the entire southern half-plane, including South-West and South-East, at every distance. SOMETIMES means the exact compass relation holds in some but not all allowed layouts.</p>
 									<div class="multi-input">
 										<span class="single-input">
-											<label for="p-74-premises">Premises</label>
-											<span class="inline-premise-spinner"><input id="p-74-premises" type="number" min="3" max="20" step="1" placeholder="" value="" aria-describedby="infinite-premises-help" style="width: 5ch">ps</span>
+											Premises
+											<span class="inline-premise-spinner"><input id="p-74-premises" type="number" min="3" max="20" step="1" placeholder="" value="" style="width: 5ch">ps</span>
 										</span>
 										<span class="single-input">
-											<label for="p-74-time">Time</label>
+											Time
 											<span class="inline-premise-spinner"><input id="p-74-time" type="number" min="1" max="600" placeholder="" value="" style="width: 5ch">sec</span>
 										</span>
 										<span class="single-input">
-											<label for="p-75">Priority</label>
+											Priority
 											<span class="inline-premise-spinner"><input id="p-75" type="number" min="1" max="9999" value="100" style="width: 6ch">%</span>
 										</span>
 									</div>
-									<p id="infinite-premises-help" class="uncertainty-setting-help">Leave premises and time blank to use global settings. Infinite mode uses 3–20 premises.</p>
 								</fieldset>
+							</fieldset>
 						</div>
-						<div class="mb-2 advanced-rrt-settings">
+						<hr class="divider"/>
+						<div class="mb-1">
 							<div class="ctrl__inner">
 								<div>
 									<input hidden id="p-80" type="checkbox" checked>
 									<label class="switch" for="p-80"></label>
 								</div>
-								<label for="p-80">Enable Advanced RRT (7D / Analogy)</label>
-							</div>
-							<fieldset id="advanced-rrt-options" aria-label="Advanced RRT options">
-								<p class="uncertainty-setting-help">Unified multi-dimensional engine: 7D metric spaces, second-order vector analogies (A:B :: C:D), and modal superposition.</p>
-								<div class="inline-input__outer">
-									<label for="p-80-mode">Dimension Mode</label>
-									<span class="inline-input__inner">
-										<select id="p-80-mode" style="width: auto; background: var(--bg-color, #1a1a24); color: inherit; border-radius: 4px; padding: 2px 4px;">
-											<option value="spatial">2D Spatial (N/S/E/W)</option>
-											<option value="spatial_facing">2D Spatial Facing (Perspective Rotation)</option>
-											<option value="spatial_vertical">3D Space + Vertical (Above/Below)</option>
-											<option value="spatial_temporal" selected>3D Space + Time (After/Before)</option>
-											<option value="spatial_temporal_vertical">4D Space + Vertical + Time</option>
-											<option value="full_7d">Full 7D (Space, Time, Scale, Hierarchy)</option>
-										</select>
-									</span>
+								<label for="p-80">Enable Advanced RRT</label>
+								<div class="tooltip-container" tabindex="0">
+									?
+									<div class="tooltip-text right">
+										Unified multi-dimensional engine:<br>
+										Space, Time, Scale, Hierarchy,<br>
+										Vector Analogies, and Modal logic.<br>
+									</div>
 								</div>
-								<div class="ctrl__inner" style="margin-top: 6px;">
+							</div>
+							<ul class="explainer">
+								<li>A is North of and After B</li>
+								<li>A : B :: C : D (Analogy)</li>
+							</ul>
+							<fieldset id="advanced-rrt-options" aria-label="Advanced RRT options" style="margin-left: 1.5rem; margin-top: 0.5rem;">
+								<div class="ctrl__inner mb-1">
+									<label for="p-80-mode">Dimensions</label>
+									<select id="p-80-mode" class="form-select ffmono" style="width: auto; max-width: 62%; margin-left: auto;">
+										<option value="spatial">2D Spatial</option>
+										<option value="spatial_facing">2D Facing Space</option>
+										<option value="spatial_vertical">3D Space + Vertical</option>
+										<option value="spatial_temporal" selected>3D Space + Time</option>
+										<option value="spatial_temporal_vertical">4D Spatio-Temporal</option>
+										<option value="full_7d">Full 7D</option>
+									</select>
+								</div>
+								<div class="ctrl__inner mb-05">
 									<div>
 										<input hidden id="p-80-analogy" type="checkbox" checked>
 										<label class="switch" for="p-80-analogy"></label>
 									</div>
 									<label for="p-80-analogy">Vector Analogies (A:B :: C:D)</label>
 								</div>
-								<div class="ctrl__inner" style="margin-top: 6px;">
+								<div class="ctrl__inner mb-05">
 									<div>
 										<input hidden id="p-80-modal" type="checkbox">
 										<label class="switch" for="p-80-modal"></label>
 									</div>
-									<label for="p-80-modal">Modal Uncertainty (MUST/COULD/CANNOT)</label>
+									<label for="p-80-modal">Modal Uncertainty</label>
+									<div class="tooltip-container" tabindex="0">
+										?
+										<div class="tooltip-text right">
+											MUST / COULD / CANNOT modal<br>
+											superposition over multi-dimensional<br>
+											coordinate systems.<br>
+										</div>
+									</div>
 								</div>
-								<div class="ctrl__inner" style="margin-top: 6px;">
+								<div class="ctrl__inner mb-05">
 									<div>
 										<input hidden id="p-80-swap" type="checkbox">
 										<label class="switch" for="p-80-swap"></label>
 									</div>
-									<label for="p-80-swap">Object Swaps (⇄ Swap X with Y)</label>
-									<span class="inline-premise-spinner" style="margin-left: auto;">
+									<label for="p-80-swap">Object Swaps</label>
+									<span class="inline-premise-spinner" style="margin-left: auto; margin-right: 0.5rem;">
 										<input id="p-80-swap-count" type="number" min="1" max="5" value="1" style="width: 4ch">ops
 									</span>
+									<div class="tooltip-container" tabindex="0">
+										?
+										<div class="tooltip-text right">
+											Dynamic permutations:<br>
+											swaps object coordinates<br>
+											(⇄ Swap X with Y).<br>
+										</div>
+									</div>
 								</div>
-								<div class="ctrl__inner" style="margin-top: 6px;">
+								<div class="ctrl__inner mb-1">
 									<div>
 										<input hidden id="p-80-facing" type="checkbox">
 										<label class="switch" for="p-80-facing"></label>
 									</div>
-									<label for="p-80-facing">Facing Space (Egocentric Perspectives)</label>
+									<label for="p-80-facing">Facing Space</label>
+									<div class="tooltip-container" tabindex="0">
+										?
+										<div class="tooltip-text right">
+											Egocentric perspective rotation:<br>
+											relative to the orientation<br>
+											each entity is facing.<br>
+										</div>
+									</div>
 								</div>
-								<div class="multi-input" style="margin-top: 8px;">
+								<div class="multi-input">
 									<span class="single-input">
-										<label for="p-80-premises">Premises</label>
+										Premises
 										<span class="inline-premise-spinner"><input id="p-80-premises" type="number" min="2" max="50" step="1" placeholder="" value="" style="width: 5ch">ps</span>
 									</span>
 									<span class="single-input">
-										<label for="p-80-time">Time</label>
+										Time
 										<span class="inline-premise-spinner"><input id="p-80-time" type="number" min="1" max="600" placeholder="" value="" style="width: 5ch">sec</span>
 									</span>
 									<span class="single-input">
-										<label for="p-80-weight">Priority</label>
+										Priority
 										<span class="inline-premise-spinner"><input id="p-80-weight" type="number" min="1" max="9999" value="100" style="width: 6ch">%</span>
 									</span>
 								</div>
 							</fieldset>
 						</div>
-						<div class="mb-2 logic-nback-settings">
+						<hr class="divider"/>
+						<div class="mb-1">
 							<div class="ctrl__inner">
 								<div>
 									<input hidden id="p-85" type="checkbox">
 									<label class="switch" for="p-85"></label>
 								</div>
 								<label for="p-85">Enable Logic N-Back</label>
+								<div class="tooltip-container" tabindex="0">
+									?
+									<div class="tooltip-text right">
+										Continuous sliding-window<br>
+										relational deduction.<br>
+										Premises stream dynamically,<br>
+										testing working-memory<br>
+										graph binding in real time.<br>
+									</div>
+								</div>
 							</div>
-							<fieldset id="logic-nback-options" aria-label="Logic N-Back options">
-								<p class="uncertainty-setting-help">Continuous sliding-window relational deduction: premises flow dynamically, testing working-memory graph binding in real time.</p>
-								<div class="inline-input__outer">
-									<label for="p-85-n">N-Back Level (Window N)</label>
-									<span class="inline-premise-spinner">
-										<input id="p-85-n" type="number" min="2" max="8" value="3" style="width: 5ch">
+							<ul class="explainer">
+								<li>Streaming premise buffer</li>
+								<li>Sliding-window graph deduction</li>
+							</ul>
+							<fieldset id="logic-nback-options" aria-label="Logic N-Back options" style="margin-left: 1.5rem; margin-top: 0.5rem;">
+								<div class="ctrl__inner mb-1">
+									<label for="p-85-n">Window N</label>
+									<span class="inline-premise-spinner" style="margin-left: auto; margin-right: 0.5rem;">
+										<input id="p-85-n" type="number" min="2" max="8" value="3" style="width: 5ch">lvl
 									</span>
+									<div class="tooltip-container" tabindex="0">
+										?
+										<div class="tooltip-text right">
+											N-Back level: size of the<br>
+											active sliding premise window (2–8).<br>
+										</div>
+									</div>
 								</div>
-								<div class="inline-input__outer" style="margin-top: 6px;">
-									<label for="p-85-mode">Relation Type</label>
-									<span class="inline-input__inner">
-										<select id="p-85-mode" style="width: auto; background: var(--bg-color, #1a1a24); color: inherit; border-radius: 4px; padding: 2px 4px;">
-											<option value="comparison" selected>Comparison (&lt; / &gt;)</option>
-											<option value="temporal">Temporal (Before / After)</option>
-											<option value="topunder">Vertical (Top / Under)</option>
-											<option value="leftright">Horizontal (Left / Right)</option>
-										</select>
-									</span>
+								<div class="ctrl__inner mb-1">
+									<label for="p-85-mode">Relation</label>
+									<select id="p-85-mode" class="form-select ffmono" style="width: auto; max-width: 62%; margin-left: auto;">
+										<option value="comparison" selected>Comparison (&lt; / &gt;)</option>
+										<option value="temporal">Temporal (Before/After)</option>
+										<option value="topunder">Vertical (Top/Under)</option>
+										<option value="leftright">Horizontal (Left/Right)</option>
+									</select>
 								</div>
-								<div class="inline-input__outer" style="margin-top: 6px;">
+								<div class="multi-input">
 									<span class="single-input">
-										<label for="p-85-premises">Premises</label>
+										Premises
 										<span class="inline-premise-spinner"><input id="p-85-premises" type="number" min="2" max="50" step="1" placeholder="" value="" style="width: 5ch">ps</span>
 									</span>
 									<span class="single-input">
-										<label for="p-85-time">Time</label>
+										Time
 										<span class="inline-premise-spinner"><input id="p-85-time" type="number" min="1" max="600" placeholder="" value="" style="width: 5ch">sec</span>
 									</span>
 									<span class="single-input">
-										<label for="p-85-weight">Priority</label>
+										Priority
 										<span class="inline-premise-spinner"><input id="p-85-weight" type="number" min="1" max="9999" value="100" style="width: 6ch">%</span>
 									</span>
 								</div>
 							</fieldset>
 						</div>
+						<hr class="divider"/>
 						<div class="mb-1">
 							<div class="ctrl__inner">
 								<div>
@@ -754,9 +837,17 @@
 										<label class="switch" for="enable-multiple-conclusions"></label>
 									</div>
 									<label for="enable-multiple-conclusions">Multiple Conclusions</label>
-									<span class="inline-premise-spinner">
+									<span class="inline-premise-spinner" style="margin-left: auto; margin-right: 0.5rem;">
 										<input id="number-of-conclusions" type="number" placeholder="" value="3" min="1" max="10" style="width: 5ch">qty
 									</span>
+									<div class="tooltip-container" tabindex="0">
+										?
+										<div class="tooltip-text right">
+											Answer multiple conclusions<br>
+											for the same premises.<br>
+											Fails fast on first error.<br>
+										</div>
+									</div>
 								</div>
 							</div>
 							<div class="mb-1">
@@ -766,6 +857,14 @@
 										<label class="switch" for="enable-harder-conclusions"></label>
 									</div>
 									<label for="enable-harder-conclusions">Harder Conclusions</label>
+									<div class="tooltip-container" tabindex="0">
+										?
+										<div class="tooltip-text right">
+											Generates harder, indirect<br>
+											deductions with fewer trivial<br>
+											or immediate connections.<br>
+										</div>
+									</div>
 								</div>
 							</div>
 						</div>
@@ -1063,7 +1162,16 @@
 											<input hidden id="p-9-auto" type="checkbox">
 											<label class="switch" for="p-9-auto"></label>
 										</div>
-										<span>Auto-Advance Slides</span>
+										<label for="p-9-auto">Auto-Advance Slides</label>
+										<div class="tooltip-container" tabindex="0">
+											?
+											<div class="tooltip-text right">
+												Paced flash exposure.<br>
+												Slides auto-advance until the<br>
+												conclusion. Adaptive speed<br>
+												adjusts delay based on performance.<br>
+											</div>
+										</div>
 									</div>
 									<div class="multi-input mb-1" id="carousel-auto-settings">
 										<span class="single-input">
@@ -1078,9 +1186,7 @@
 											</span>
 										</span>
 									</div>
-									<p class="explainer" id="carousel-auto-explainer">
-										Paced flash exposure. Slides auto-advance until the conclusion. Adaptive speed automatically adjusts delay based on performance.
-									</p>
+									<span id="carousel-auto-explainer" style="display:none;"></span>
 								</div>
 							</div>
 							<div class="mb-1">
