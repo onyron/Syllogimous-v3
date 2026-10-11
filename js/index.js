@@ -2634,10 +2634,14 @@ function createHQLI(question, i) {
     const explanationButton = parent.querySelector(".explanation-button");
     if (explanationButton) {
         explanationButton.addEventListener('mouseenter', (e) => {
-            createExplanationPopup(q, e);
+            createExplanationPopup(q, e, false);
         });
         explanationButton.addEventListener('mouseleave', () => {
-            removeExplanationPopup();
+            removeExplanationPopup(false);
+        });
+        explanationButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            createExplanationPopup(q, e, true);
         });
     }
     return parent.firstElementChild;
