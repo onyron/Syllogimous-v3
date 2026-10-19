@@ -661,12 +661,18 @@ function renderCarousel() {
 }
 
 function carouselBack() {
+    if (carouselBackButton && typeof carouselBackButton.blur === 'function') {
+        carouselBackButton.blur();
+    }
     clearCarouselAutoTimer();
     carouselIndex = Math.max(0, carouselIndex - 1);
     renderCarousel();
 }
   
 function carouselNext() {
+    if (carouselNextButton && typeof carouselNextButton.blur === 'function') {
+        carouselNextButton.blur();
+    }
     clearCarouselAutoTimer();
     if (!question) return;
     const maxIndex = (question.premises ? question.premises.length : 0) + (question.operations ? question.operations.length : 0);
@@ -2697,17 +2703,30 @@ function handleCountDown() {
         startCountDown();
     else
         stopCountDown();
+    if (timerToggle && typeof timerToggle.blur === 'function') {
+        timerToggle.blur();
+    }
 }
 
 timerToggle.addEventListener("click", evt => {
     handleCountDown();
+    if (timerToggle && typeof timerToggle.blur === 'function') {
+        timerToggle.blur();
+    }
+});
+
+timerToggle.addEventListener("focus", () => {
+    if (timerToggle && typeof timerToggle.blur === 'function') {
+        timerToggle.blur();
+    }
 });
 
 let dehoverQueue = [];
 function handleKeyPress(event) {
-    const tagName = event.target.tagName.toLowerCase();
-    const isEditable = event.target.isContentEditable;
-    if (event.repeat || document.querySelector('.uncertainty-explanation[open]') || tagName === "button" || tagName === "input" || tagName === "textarea" || isEditable) {
+    const tagName = event.target && event.target.tagName ? event.target.tagName.toLowerCase() : "";
+    const isEditable = event.target && event.target.isContentEditable;
+    const isTextInput = (tagName === "input" && event.target.type !== "checkbox" && event.target.type !== "radio");
+    if (event.repeat || document.querySelector('.uncertainty-explanation[open]') || (tagName === "button" && !event.target.classList.contains("carousel_btn")) || isTextInput || tagName === "textarea" || isEditable) {
         return;
     }
     if (question && question.type === 'logic-nback' && question.isFilling) {
@@ -2772,6 +2791,7 @@ function handleKeyPress(event) {
             }
             break;
         case "ArrowLeft":
+            event.preventDefault();
             if (savedata.enableCarouselMode && !carouselNextButton.disabled) {
                 carouselBackButton.click();
             } else {
@@ -2779,6 +2799,7 @@ function handleKeyPress(event) {
             }
             break;
         case "ArrowRight":
+            event.preventDefault();
             if (savedata.enableCarouselMode && !carouselNextButton.disabled) {
                 carouselNextButton.click();
             } else {
@@ -2786,6 +2807,7 @@ function handleKeyPress(event) {
             }
             break;
         case "Space":
+            event.preventDefault();
             timerToggle.checked = !timerToggle.checked;
             handleCountDown();
             break;

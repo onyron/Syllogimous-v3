@@ -106,7 +106,7 @@ let savedata = {
     "overrideDirection3DWeight": 100,
     "overrideDirection4DWeight": 100,
     "overrideAnchorSpaceWeight": 100,
-    "useJunkEmoji": false,
+    "useJunkEmoji": true,
     "useVisualNoise": false,
     "visualNoiseSplits": 5,
     "space2DHardModeLevel": 1,

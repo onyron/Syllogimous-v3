@@ -485,6 +485,16 @@ input[type="number"]::-moz-inner-spin-button {
     color: #000;
 }
 
+#timer-toggle {
+    cursor: pointer;
+}
+
+#timer-toggle:focus,
+#timer-toggle:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
 .inline-premise-wrapper {
     align-items: center;
     background-color: #000a;
