@@ -62,8 +62,7 @@ class ProgressStore {
 
     calculateKeyFromCustomType(question, type) {
         let plen = question.premises;
-        let countdown = question.countdown;
-        let key = `${type}-${plen}-${countdown}`;
+        let key = `${type}-${plen}`;
         if (question.modifiers && question.modifiers.length !== 0) {
             key += `-${question.modifiers.join('-')}`
         }
@@ -119,51 +118,16 @@ class ProgressStore {
         const mapping = TYPE_TO_OVERRIDES[type];
         if (!mapping) return;
         const [overridePremiseSetting, overrideTimerSetting] = mapping;
-        let newTimerValue;
-        if (savedata.autoProgressionChange === 'auto') {
-            const minUpgrade = q.countdown - 1;
-            const left = successes[successes.length - 3].timeElapsed / 1000;
-            const right = successes[successes.length - 2].timeElapsed / 1000;
-            const percentile90ish = Math.floor((left + right) / 2) + 1;
-            newTimerValue = Math.min(minUpgrade, percentile90ish);
-        } else {
-            newTimerValue = q.countdown - savedata.autoProgressionTimeDrop;
-        }
-        newTimerValue = Math.max(1, newTimerValue);
-        const currentGoal = findAutoProgressionGoal(q.premises);
-        const averageTime = successes.map(s => s.timeElapsed / 1000).reduce((a, b) => a + b) / successes.length;
-        if (averageTime <= currentGoal || newTimerValue <= currentGoal) {
-            const nextPremises = q.premises + 1;
-            const nextGoal = findAutoProgressionGoal(nextPremises);
-            savedata[overridePremiseSetting] = nextPremises;
-            savedata[overrideTimerSetting] = nextGoal + 15;
-        } else {
-            savedata[overrideTimerSetting] = newTimerValue;
-        }
+        const nextPremises = (q.premises || 2) + 1;
+        savedata[overridePremiseSetting] = nextPremises;
     }
 
     fail(q, trailingProgress, successes, type) {
         const mapping = TYPE_TO_OVERRIDES[type];
         if (!mapping) return;
         const [overridePremiseSetting, overrideTimerSetting] = mapping;
-        let newTimerValue;
-        if (savedata.autoProgressionChange === 'auto') {
-            newTimerValue = q.countdown + 5;
-        } else {
-            newTimerValue = q.countdown + savedata.autoProgressionTimeBump;
-        }
-        const currentGoal = findAutoProgressionGoal(q.premises);
-        if (newTimerValue > currentGoal + 25) {
-            if (q.premises > 2) {
-                const prevPremises = q.premises - 1;
-                const prevGoal = findAutoProgressionGoal(prevPremises);
-                savedata[overridePremiseSetting] = prevPremises;
-                savedata[overrideTimerSetting] = prevGoal + 20;
-            } else {
-                savedata[overrideTimerSetting] = Math.min(newTimerValue, 60);
-            }
-        } else {
-            savedata[overrideTimerSetting] = newTimerValue;
+        if (q.premises > 2) {
+            savedata[overridePremiseSetting] = q.premises - 1;
         }
     }
 
@@ -183,6 +147,7 @@ class ProgressStore {
                 q.didTriggerProgress = true;
             }
             populateSettings();
+            if (q.didTriggerProgress && typeof save === 'function') save();
             return;
         }
         for (const type of commonTypes) {
@@ -196,6 +161,7 @@ class ProgressStore {
             }
         }
         populateSettings();
+        if (q.didTriggerProgress && typeof save === 'function') save();
     }
 
     async renderCurrentProgress(question) {

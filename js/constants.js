@@ -89,7 +89,7 @@ let savedata = {
     "overrideDirection3DTime": 25,
     "overrideDirection4DTime": null,
     "overrideAnchorSpaceTime": null,
-    "overrideAdvancedRRTTime": null,
+    "overrideAdvancedRRTTime": 25,
     "overrideLogicNBackTime": null,
     "overrideDistinctionWeight": 100,
     "overrideLeftRightWeight": 25,

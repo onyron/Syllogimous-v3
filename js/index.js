@@ -1005,8 +1005,8 @@ function relationToVector(text) {
     if (/\bsouth\b/.test(rel)) y = -1;
     if (/\beast\b/.test(rel)) x = 1;
     if (/\bwest\b/.test(rel)) x = -1;
-    if (/\babove\b/.test(rel)) z = 1;
-    if (/\bbelow\b/.test(rel)) z = -1;
+    if (/\babove\b/.test(rel) || /\bon top of\b/.test(rel)) z = 1;
+    if (/\bbelow\b/.test(rel) || /\bunder\b/.test(rel)) z = -1;
 
     if (
         /\bright\b/.test(rel) ||
@@ -1118,6 +1118,19 @@ function solveSpatialGraph(premises, baseConclusion, question) {
                         y: c2.y + vector.y,
                         z: c2.z + vector.z
                     });
+                    changed = true;
+                } else if (c1 && c2 && getComp(e1) !== getComp(e2)) {
+                    const dx = (c1.x - vector.x) - c2.x;
+                    const dy = (c1.y - vector.y) - c2.y;
+                    const dz = (c1.z - vector.z) - c2.z;
+                    const targetComp = getComp(e2);
+                    for (const [k, v] of comp.entries()) {
+                        if (v === targetComp && coords.get(k)) {
+                            const ck = coords.get(k);
+                            ck.x += dx; ck.y += dy; ck.z += dz;
+                        }
+                    }
+                    mergeComp(e1, e2);
                     changed = true;
                 }
 
@@ -1269,7 +1282,7 @@ function solveSpatialGraph(premises, baseConclusion, question) {
                 continue;
             }
 
-            const m6 = clean.match(/(.+?)\s+is\s+([xyz])[- ]mirrored\s+across\s+(.+)/i);
+            const m6 = clean.match(/(.+?)\s+is\s+([xyz])\s*[- ]\s*mirrored\s+across\s+(.+)/i);
             if (m6) {
                 const ent1 = findEnt(m6[1]);
                 const ax = m6[2].toLowerCase();
@@ -1298,6 +1311,19 @@ function solveSpatialGraph(premises, baseConclusion, question) {
                             }
                         }
                     }
+                }
+                continue;
+            }
+
+            const mScale = clean.match(/(.+?)\s+is\s+([xyz])\s*[- ]\s*scaled\s+(\d+)×\s+from\s+(.+)/i);
+            if (mScale) {
+                const ent1 = findEnt(mScale[1]);
+                const ax = mScale[2].toLowerCase();
+                const factor = parseFloat(mScale[3]);
+                const ent2 = findEnt(mScale[4]);
+                if (ent1 && ent2 && coords.get(ent1) && coords.get(ent2)) {
+                    const c1 = coords.get(ent1), c2 = coords.get(ent2);
+                    c1[ax] = c2[ax] + factor * (c1[ax] - c2[ax]);
                 }
                 continue;
             }
@@ -1964,6 +1990,7 @@ function generateUniqueConclusions(question, count) {
     if (!question || !question.conclusion) return [];
 
     if (question.type === 'syllogism') return generateSyllogismConclusions(question, count);
+    if (question.type === 'advanced-rrt') return question.conclusionsList || [{ text: question.conclusion, isValid: question.isValid }];
     if (question?.tags?.includes('analogy')) return generateAnalogyConclusions(question, count);
     if (question.type === 'binary') return generateBinaryConclusions(question, count);
 
@@ -2158,7 +2185,7 @@ function init() {
         const originalIsValid = question.isValid;
         question.conclusionsList = generateUniqueConclusions(question, numConclusions);
 
-        if (question.conclusionsList.length > 1) {
+        if (question.conclusionsList.length >= 1) {
             question.originalConclusion = originalConclusion;
             question.originalIsValid = originalIsValid;
             question.conclusion = question.conclusionsList[0].text;
