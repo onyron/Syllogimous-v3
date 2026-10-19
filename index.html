@@ -67,7 +67,7 @@
 							<div class="inline-input__outer big-input">
 								Global Premises
 								<span class="inline-input__inner">
-									<input id="p-5" type="number" min="1" max="100" value="3" style="width: 5ch">qty
+									<input id="p-5" type="number" min="1" max="100" value="2" style="width: 5ch">qty
 								</span>
 							</div>
 						</div>
@@ -340,7 +340,7 @@
 						<div class="mb-1">
 							<div class="ctrl__inner">
 								<div>
-									<input hidden id="p-41" type="checkbox">
+									<input hidden id="p-41" type="checkbox" checked>
 									<label class="switch" for="p-41"></label>
 								</div>
 								<label for="p-41" style="max-width: 170px;">Enable Auto Progression</label>
@@ -363,7 +363,7 @@
 										<div class="dropdown-item">
 											Goal
 											<span class="inline-premise-spinner">
-												<input id="p-42" type="number" placeholder="" value="10" min="1" max="25" style="width: 5ch">sec
+												<input id="p-42" type="number" placeholder="" value="15" min="1" max="25" style="width: 5ch">sec
 											</span>
 										</div>
 										<div class="dropdown-item">
@@ -375,7 +375,7 @@
 										<div class="dropdown-item">
 											Success criteria
 											<span class="inline-premise-spinner">
-												<input id="p-50" type="number" placeholder="" value="90" min="50" max="100" style="width: 6ch">%
+												<input id="p-50" type="number" placeholder="" value="85" min="50" max="100" style="width: 6ch">%
 											</span>
 										</div>
 										<div class="dropdown-item">
@@ -386,7 +386,7 @@
 										</div>
 										<div class="dropdown-item">
 											<select id="p-52" name="progression-grouping" class="form-select ffmono">
-											  <option value="simple">Progress distinction and linear together</option>
+											  <option value="simple" selected>Progress distinction and linear together</option>
 											  <option value="separate">Only progress linear questions together</option>
 											</select>
 										</div>
@@ -399,13 +399,13 @@
 										<div id="time-dropper" class="dropdown-item" style="display: none;">
 											Decrease on level up
 											<span class="inline-premise-spinner">
-												<input id="p-68" type="number" placeholder="" value="5" min="1" max="50" style="width: 5ch">sec
+												<input id="p-68" type="number" placeholder="" value="2" min="1" max="50" style="width: 5ch">sec
 											</span>
 										</div>
 										<div id="time-bumper" class="dropdown-item" style="display: none;">
 											Increase on failure
 											<span class="inline-premise-spinner">
-												<input id="p-69" type="number" placeholder="" value="5" min="1" max="50" style="width: 5ch">sec
+												<input id="p-69" type="number" placeholder="" value="2" min="1" max="50" style="width: 5ch">sec
 											</span>
 										</div>
 									</div>
@@ -538,7 +538,7 @@
 							<div class="inline-input__outer">
 								Scramble Factor
 								<span class="inline-premise-spinner">
-									<input id="p-31" type="number" placeholder="" min="0" max="100" value="" style="width: 6ch">%
+									<input id="p-31" type="number" placeholder="" min="0" max="100" value="100" style="width: 6ch">%
 								</span>
 								<div class="tooltip-container" tabindex="0">
 									?
@@ -625,7 +625,7 @@
 						<div class="mb-1">
 							<div class="ctrl__inner">
 								<div>
-									<input hidden id="p-2" type="checkbox">
+									<input hidden id="p-2" type="checkbox" checked>
 									<label class="switch" for="p-2"></label>
 								</div>
 								<label for="p-2">Enable Linear</label>
@@ -709,7 +709,7 @@
 						<div class="mb-1">
 							<div class="ctrl__inner">
 								<div>
-									<input hidden id="p-6" type="checkbox">
+									<input hidden id="p-6" type="checkbox" checked>
 									<label class="switch" for="p-6"></label>
 								</div>
 								<label for="p-6">Enable Space 2D</label>
@@ -735,7 +735,7 @@
 						<div class="mb-1">
 							<div class="ctrl__inner">
 								<div>
-									<input hidden id="p-12" type="checkbox">
+									<input hidden id="p-12" type="checkbox" checked>
 									<label class="switch" for="p-12"></label>
 								</div>
 								<label for="p-12">Enable Space 3D</label>
@@ -832,12 +832,12 @@
 							<div class="mb-1">
 								<div class="ctrl__inner">
 									<div>
-										<input hidden id="enable-multiple-conclusions" type="checkbox" checked>
+										<input hidden id="enable-multiple-conclusions" type="checkbox">
 										<label class="switch" for="enable-multiple-conclusions"></label>
 									</div>
 									<label for="enable-multiple-conclusions">Multiple Conclusions</label>
 									<span class="inline-premise-spinner" style="margin-left: auto; margin-right: 0.5rem;">
-										<input id="number-of-conclusions" type="number" placeholder="" value="3" min="1" max="10" style="width: 5ch">qty
+										<input id="number-of-conclusions" type="number" placeholder="" value="1" min="1" max="10" style="width: 5ch">qty
 									</span>
 									<div class="tooltip-container" tabindex="0">
 										?
@@ -873,7 +873,7 @@
 							<div class="mb-1">
 								<div class="ctrl__inner">
 									<div>
-										<input hidden id="p-3" type="checkbox" checked>
+										<input hidden id="p-3" type="checkbox">
 										<label class="switch" for="p-3"></label>
 									</div>
 									<span>Enable Syllogism</span>
@@ -900,7 +900,7 @@
 							<div class="mb-1">
 								<div class="ctrl__inner">
 									<div>
-										<input hidden id="p-4" type="checkbox">
+										<input hidden id="p-4" type="checkbox" checked>
 										<label class="switch" for="p-4"></label>
 									</div>
 									<span>Enable Analogy</span>
@@ -1038,11 +1038,11 @@
 								<div class="multi-input">
 									<span class="single-input">
 										2D
-										<span class="inline-premise-spinner"><input id="p-29" type="number" placeholder="" min="0" max="10" value="" style="width: 5ch">lvl</span>
+										<span class="inline-premise-spinner"><input id="p-29" type="number" placeholder="" min="0" max="10" value="1" style="width: 5ch">lvl</span>
 									</span>
 									<span class="single-input">
 										3D
-										<span class="inline-premise-spinner"><input id="p-30" type="number" placeholder="" min="0" max="10" value="" style="width: 5ch">lvl</span>
+										<span class="inline-premise-spinner"><input id="p-30" type="number" placeholder="" min="0" max="10" value="1" style="width: 5ch">lvl</span>
 									</span>
 									<span class="single-input">
 										Space-Time
@@ -1146,7 +1146,7 @@
 							<div class="mb-1">
 								<div class="ctrl__inner">
 									<div>
-										<input hidden id="p-9" type="checkbox">
+										<input hidden id="p-9" type="checkbox" checked>
 										<label class="switch" for="p-9"></label>
 									</div>
 									<span>Enable Carousel Mode</span>
@@ -1157,7 +1157,7 @@
 								<div id="carousel-suboptions" class="mb-1" style="margin-left: 1.5rem; margin-top: 0.5rem;">
 									<div class="ctrl__inner mb-1">
 										<div>
-											<input hidden id="p-9-auto" type="checkbox">
+											<input hidden id="p-9-auto" type="checkbox" checked>
 											<label class="switch" for="p-9-auto"></label>
 										</div>
 										<label for="p-9-auto">Auto-Advance Slides</label>
@@ -1179,7 +1179,7 @@
 										<span class="single-input">
 											Adaptive Speed
 											<span class="inline-premise-spinner">
-												<input hidden id="p-9-adaptive" type="checkbox">
+												<input hidden id="p-9-adaptive" type="checkbox" checked>
 												<label class="switch" for="p-9-adaptive"></label>
 											</span>
 										</span>

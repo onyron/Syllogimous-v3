@@ -2169,7 +2169,7 @@ function init() {
 }
 
 function renderConclusionSpoiler() {
-    if (savedata.spoilerConclusion) {
+    if (savedata.spoilerConclusion && !savedata.enableCarouselMode) {
         spoilerArea.classList.add('spoiler');
     } else {
         spoilerArea.classList.remove('spoiler');
