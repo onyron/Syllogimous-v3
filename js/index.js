@@ -1753,7 +1753,9 @@ function chooseDirectTarget(count, groups) {
 
     if (!directCount) return 0;
     if (!indirectCount) return Math.min(count, directCount);
-    if (count <= 1) return randomUnit() < 0.5 ? 1 : 0;
+    // Single conclusion + Harder Conclusions: never pick a directly stated pair
+    // (it only needs recall of one premise, not integration of the model).
+    if (count <= 1) return 0;
 
     const minDirect = 1;
     const maxDirect = Math.min(count - 1, directCount);
