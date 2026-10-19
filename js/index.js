@@ -1965,10 +1965,11 @@ function generateUniqueConclusions(question, count) {
     if (question?.tags?.includes('analogy')) return generateAnalogyConclusions(question, count);
     if (question.type === 'binary') return generateBinaryConclusions(question, count);
 
-    if (count <= 1) return [{ text: question.conclusion, isValid: question.isValid }];
-
     const harderCheckbox = document.querySelector("#enable-harder-conclusions");
     const isHarderEnabled = !!(savedata.enableHarderConclusions || (harderCheckbox && harderCheckbox.checked));
+
+    if (count <= 1 && !isHarderEnabled) return [{ text: question.conclusion, isValid: question.isValid }];
+
     const graph = solveSpatialGraph(question.premises, question.conclusion, question);
     if (!graph || !graph.evaluateRelation) return [{ text: question.conclusion, isValid: question.isValid }];
 
@@ -2098,6 +2099,7 @@ function generateUniqueConclusions(question, count) {
         }
     }
 
+    if (!conclusions.length) return [{ text: question.conclusion, isValid: question.isValid }];
     return shuffleArray(conclusions.slice(0, count));
 }
 
