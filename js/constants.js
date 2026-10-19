@@ -59,7 +59,7 @@ let savedata = {
     "maxNestedBinaryDepth": 1,
     "removeNegationExplainer": false,
     "nonsenseWordLength": 3,
-    "useNonsenseWords": true,
+    "useNonsenseWords": false,
     "garbageWordLength": 3,
     "useGarbageWords": false,
     "useEmoji": false,
