@@ -16,7 +16,8 @@ const TYPE_TO_OVERRIDES = {
 
 const COMMON_TYPES = [
     ["linear", "distinction", "syllogism"],
-]
+    ["space-two-d", "space-three-d"],
+];
 
 const COMMON_TYPES_TABLE = COMMON_TYPES.reduce((acc, types) => {
     for (let i = 0; i < types.length; i++) {
@@ -46,6 +47,12 @@ function findFailureCriteria() {
 
 function findAutoProgressionTrailing() {
     return Math.max(5, Math.min(savedata.autoProgressionTrailing, 50));
+}
+
+function findAutoProgressionGoal(premises = 2) {
+    const base = Math.max(5, Math.min(Number(savedata.autoProgressionGoal) || 15, 60));
+    const extraPremises = Math.max(0, (premises || 2) - 2);
+    return base + extraPremises * 4;
 }
 
 class ProgressStore {
@@ -123,10 +130,13 @@ class ProgressStore {
             newTimerValue = q.countdown - savedata.autoProgressionTimeDrop;
         }
         newTimerValue = Math.max(1, newTimerValue);
+        const currentGoal = findAutoProgressionGoal(q.premises);
         const averageTime = successes.map(s => s.timeElapsed / 1000).reduce((a, b) => a + b) / successes.length;
-        if (averageTime <= savedata.autoProgressionGoal || newTimerValue <= savedata.autoProgressionGoal) {
-            savedata[overridePremiseSetting] = q.premises + 1;
-            savedata[overrideTimerSetting] = savedata.autoProgressionGoal + 15;
+        if (averageTime <= currentGoal || newTimerValue <= currentGoal) {
+            const nextPremises = q.premises + 1;
+            const nextGoal = findAutoProgressionGoal(nextPremises);
+            savedata[overridePremiseSetting] = nextPremises;
+            savedata[overrideTimerSetting] = nextGoal + 15;
         } else {
             savedata[overrideTimerSetting] = newTimerValue;
         }
@@ -142,10 +152,13 @@ class ProgressStore {
         } else {
             newTimerValue = q.countdown + savedata.autoProgressionTimeBump;
         }
-        if (newTimerValue > savedata.autoProgressionGoal + 25) {
+        const currentGoal = findAutoProgressionGoal(q.premises);
+        if (newTimerValue > currentGoal + 25) {
             if (q.premises > 2) {
-                savedata[overridePremiseSetting] = q.premises - 1;
-                savedata[overrideTimerSetting] = savedata.autoProgressionGoal + 20;
+                const prevPremises = q.premises - 1;
+                const prevGoal = findAutoProgressionGoal(prevPremises);
+                savedata[overridePremiseSetting] = prevPremises;
+                savedata[overrideTimerSetting] = prevGoal + 20;
             } else {
                 savedata[overrideTimerSetting] = Math.min(newTimerValue, 60);
             }
