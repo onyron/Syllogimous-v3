@@ -546,6 +546,9 @@ function startCarouselAutoTimer() {
     if (!savedata.enableCarouselMode || !savedata.carouselAutoAdvance || !question) {
         return;
     }
+    if (!timerToggled || !timerRunning) {
+        return;
+    }
     const totalExposureSlides = (question.premises ? question.premises.length : 0) + (question.operations ? question.operations.length : 0);
     if (carouselIndex >= totalExposureSlides) {
         return;
@@ -649,7 +652,7 @@ function renderCarousel() {
         carouselDisplayText.innerHTML = currentConcText;
     }
 
-    if (savedata.enableCarouselMode && savedata.carouselAutoAdvance) {
+    if (savedata.enableCarouselMode && savedata.carouselAutoAdvance && timerToggled && timerRunning) {
         const totalExposureSlides = q.premises.length + (q.operations ? q.operations.length : 0);
         if (carouselIndex < totalExposureSlides) {
             startCarouselAutoTimer();
@@ -2154,14 +2157,13 @@ function init() {
     }
 
     stopCountDown();
+    carouselInit();
+    displayInit();
     if (timerToggled) {
         startCountDown();
     } else {
         renderTimerBar();
     }
-
-    carouselInit();
-    displayInit();
     if (typeof PROGRESS_STORE !== 'undefined') {
         PROGRESS_STORE.renderCurrentProgress(question);
     }
