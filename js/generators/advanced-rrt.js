@@ -556,56 +556,78 @@ function createAdvancedRRTQuestion(length, settings = (typeof savedata !== 'unde
         };
 
         const targetIsTrue = Math.random() < 0.5;
-        const itemA1 = words[words.length - 1];
-        const itemB1 = words[words.length - 2];
-        const delta1 = getDelta(itemA1, itemB1);
 
-        let itemA2, itemB2;
-        if (targetIsTrue) {
-            let found = false;
-            for (let i = 0; i < words.length; i++) {
-                for (let j = 0; j < words.length; j++) {
-                    if (i === j) continue;
-                    const wA = words[i], wB = words[j];
-                    if ((wA === itemA1 && wB === itemB1) || (wA === itemB1 && wB === itemA1)) continue;
-                    const d = getDelta(wA, wB);
-                    if (d.some(v => v !== 0) && d.every((val, a) => val === delta1[a])) {
-                        itemA2 = wA;
-                        itemB2 = wB;
-                        found = true;
-                        break;
-                    }
+        const allPairs = [];
+        for (let i = 0; i < words.length; i++) {
+            for (let j = 0; j < words.length; j++) {
+                if (i === j) continue;
+                const d = getDelta(words[i], words[j]);
+                if (d.some(v => v !== 0)) {
+                    allPairs.push({ a: words[i], b: words[j], delta: d });
                 }
-                if (found) break;
-            }
-            if (!found) {
-                itemA2 = words[1];
-                itemB2 = words[0];
-            }
-        } else {
-            for (let i = 0; i < words.length; i++) {
-                for (let j = 0; j < words.length; j++) {
-                    if (i === j) continue;
-                    const wA = words[i], wB = words[j];
-                    if ((wA === itemA1 && wB === itemB1) || (wA === itemB1 && wB === itemA1)) continue;
-                    const d = getDelta(wA, wB);
-                    if (d.some(v => v !== 0) && !d.every((val, a) => val === delta1[a])) {
-                        itemA2 = wA;
-                        itemB2 = wB;
-                        break;
-                    }
-                }
-                if (itemA2) break;
-            }
-            if (!itemA2) {
-                itemA2 = words[1];
-                itemB2 = words[0];
             }
         }
 
-        const delta2 = getDelta(itemA2, itemB2);
+        const matchCombos = [];
+        const diffCombos = [];
+        for (let i = 0; i < allPairs.length; i++) {
+            for (let j = i + 1; j < allPairs.length; j++) {
+                const p1 = allPairs[i], p2 = allPairs[j];
+                if ((p1.a === p2.a && p1.b === p2.b) || (p1.a === p2.b && p1.b === p2.a)) continue;
+                const isMatch = p1.delta.every((val, idx) => val === p2.delta[idx]);
+                if (isMatch) {
+                    matchCombos.push({ p1, p2, isMatch: true });
+                } else {
+                    diffCombos.push({ p1, p2, isMatch: false });
+                }
+            }
+        }
+
+        let selectedCombo;
+        let statedSame;
+
+        if (targetIsTrue) {
+            if (matchCombos.length > 0 && (diffCombos.length === 0 || Math.random() < 0.5)) {
+                selectedCombo = matchCombos[Math.floor(Math.random() * matchCombos.length)];
+                statedSame = true;
+            } else if (diffCombos.length > 0) {
+                selectedCombo = diffCombos[Math.floor(Math.random() * diffCombos.length)];
+                statedSame = false;
+            } else if (matchCombos.length > 0) {
+                selectedCombo = matchCombos[Math.floor(Math.random() * matchCombos.length)];
+                statedSame = true;
+            } else {
+                const p1 = allPairs[0], p2 = allPairs[1] || allPairs[0];
+                const m = p1.delta.every((val, idx) => val === p2.delta[idx]);
+                selectedCombo = { p1, p2, isMatch: m };
+                statedSame = m;
+            }
+        } else {
+            if (diffCombos.length > 0 && (matchCombos.length === 0 || Math.random() < 0.5)) {
+                selectedCombo = diffCombos[Math.floor(Math.random() * diffCombos.length)];
+                statedSame = true;
+            } else if (matchCombos.length > 0) {
+                selectedCombo = matchCombos[Math.floor(Math.random() * matchCombos.length)];
+                statedSame = false;
+            } else if (diffCombos.length > 0) {
+                selectedCombo = diffCombos[Math.floor(Math.random() * diffCombos.length)];
+                statedSame = true;
+            } else {
+                const p1 = allPairs[0], p2 = allPairs[1] || allPairs[0];
+                const m = p1.delta.every((val, idx) => val === p2.delta[idx]);
+                selectedCombo = { p1, p2, isMatch: m };
+                statedSame = !m;
+            }
+        }
+
+        const itemA1 = selectedCombo.p1.a;
+        const itemB1 = selectedCombo.p1.b;
+        const itemA2 = selectedCombo.p2.a;
+        const itemB2 = selectedCombo.p2.b;
+        const delta1 = selectedCombo.p1.delta;
+        const delta2 = selectedCombo.p2.delta;
+
         const actualMatch = delta1.every((val, a) => val === delta2[a]);
-        const statedSame = true;
         const isValid = (statedSame === actualMatch);
 
         const concHTML = formatAdvancedRRTAnalogyHTML(itemA1, itemB1, itemA2, itemB2, statedSame);
